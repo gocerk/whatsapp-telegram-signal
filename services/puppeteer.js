@@ -4,7 +4,8 @@ const puppeteer = require('puppeteer');
     // 1. Tarayıcıyı Başlat
     const browser = await puppeteer.launch({
         headless: true, // Arka planda çalışması için true, görmek için false yapabilirsiniz
-        defaultViewport: { width: 1440, height: 900 } // Çıktı çözünürlüğü
+        defaultViewport: { width: 1440, height: 900 }, // Çıktı çözünürlüğü
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     
     const page = await browser.newPage();
