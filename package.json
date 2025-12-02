@@ -11,7 +11,10 @@
     "test:send": "node test-groups.js send",
     "test:signal": "node test-groups.js signal",
     "test:message": "node test-send-message.js",
-    "send:message": "node test-send-message.js"
+    "send:message": "node test-send-message.js",
+    "test:telegram": "node test-telegram.js",
+    "test:telegram:quick": "node test-telegram.js quick",
+    "test:telegram:signal": "node test-telegram.js signal"
   },
   "keywords": [],
   "author": "",
