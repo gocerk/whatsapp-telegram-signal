@@ -30,28 +30,28 @@ async function testTelegramPhoto() {
   // Test different photo sending methods
   const tests = [];
 
-  // Test 1: Send photo from file path (if provided)
-  if (photoPath) {
-    tests.push({
-      name: 'File Path Photo',
-      test: () => testPhotoFromPath(telegramService, photoPath, caption)
-    });
-  }
+  // // Test 1: Send photo from file path (if provided)
+  // if (photoPath) {
+  //   tests.push({
+  //     name: 'File Path Photo',
+  //     test: () => testPhotoFromPath(telegramService, photoPath, caption)
+  //   });
+  // }
 
-  // Test 2: Send photo from buffer (using existing tradingview_grafik.png)
-  const defaultImagePath = './tradingview_grafik.png';
-  if (fs.existsSync(defaultImagePath)) {
-    tests.push({
-      name: 'Buffer Photo (tradingview_grafik.png)',
-      test: () => testPhotoFromBuffer(telegramService, defaultImagePath, caption || 'Test photo from buffer')
-    });
-  }
+  // // Test 2: Send photo from buffer (using existing tradingview_grafik.png)
+  // const defaultImagePath = './tradingview_grafik.png';
+  // if (fs.existsSync(defaultImagePath)) {
+  //   tests.push({
+  //     name: 'Buffer Photo (tradingview_grafik.png)',
+  //     test: () => testPhotoFromBuffer(telegramService, defaultImagePath, caption || 'Test photo from buffer')
+  //   });
+  // }
 
-  // Test 3: Send photo from URL
-  tests.push({
-    name: 'URL Photo',
-    test: () => testPhotoFromURL(telegramService, 'https://via.placeholder.com/400x300.png?text=Test+Image', caption || 'Test photo from URL')
-  });
+  // // Test 3: Send photo from URL
+  // tests.push({
+  //   name: 'URL Photo',
+  //   test: () => testPhotoFromURL(telegramService, 'https://via.placeholder.com/400x300.png?text=Test+Image', caption || 'Test photo from URL')
+  // });
 
   // Test 4: Send formatted trading message with photo
   tests.push({
