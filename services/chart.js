@@ -39,7 +39,8 @@ class ChartService {
         defaultViewport: { 
           width: options.width || 800, 
           height: options.height || 600 
-        }
+        },
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
       });
       
       const page = await browser.newPage();
