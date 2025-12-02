@@ -1,4 +1,5 @@
 const puppeteer = require('puppeteer');
+require('dotenv').config('../.env');
 
 (async (currency) => {
     // 1. Tarayıcıyı Başlat
