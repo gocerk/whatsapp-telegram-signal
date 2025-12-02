@@ -1,4 +1,6 @@
 const puppeteer = require('puppeteer');
+const fs = require('fs');
+const path = require('path');
 
 // Logging utility
 const log = (level, message, data = null) => {
@@ -81,27 +83,42 @@ class ChartService {
       let screenshotBuffer;
       
       if (element) {
-        screenshotBuffer = await element.screenshot({ 
+        screenshotBuffer = await element.screenshot({
           type: 'png'
         });
       } else {
         log('warn', 'Chart area not found, taking full page screenshot');
-        screenshotBuffer = await page.screenshot({ 
+        screenshotBuffer = await page.screenshot({
           type: 'png',
-          fullPage: false 
+          fullPage: false
         });
       }
 
       await browser.close();
 
+      // Save screenshot to root directory
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `chart_${formattedSymbol.replace(':', '_')}_${timestamp}.png`;
+      const filepath = path.join(process.cwd(), filename);
+      
+      try {
+        fs.writeFileSync(filepath, screenshotBuffer);
+        log('info', `Chart image saved to: ${filename}`);
+      } catch (saveError) {
+        log('warn', 'Failed to save chart image to file', { error: saveError.message });
+      }
+
       log('info', `Chart image captured successfully for ${symbol}`, {
         size: screenshotBuffer.length,
-        contentType: 'image/png'
+        contentType: 'image/png',
+        savedAs: filename
       });
       
       return {
         buffer: screenshotBuffer,
-        contentType: 'image/png'
+        contentType: 'image/png',
+        filename: filename,
+        filepath: filepath
       };
 
     } catch (error) {
