@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 
-const getChartImage = async (currency) => {
+(async (currency) => {
     // 1. Tarayıcıyı Başlat
     const browser = await puppeteer.launch({
         headless: true, // Arka planda çalışması için true, görmek için false yapabilirsiniz
@@ -73,6 +73,6 @@ const getChartImage = async (currency) => {
     console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
 
     await browser.close();
-};
+})("BINANCE:BTCUSDT");
 
-module.exports = { getChartImage };
+// module.exports = { getChartImage };
