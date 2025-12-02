@@ -37,8 +37,8 @@ class ChartService {
       const browser = await puppeteer.launch({
         headless: true,
         defaultViewport: { 
-          width: 1740, 
-          height: 900 
+          width: 1840, 
+          height: 1000 
         },
         args: ['--no-sandbox', '--disable-setuid-sandbox']
       });

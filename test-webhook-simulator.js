@@ -8,7 +8,7 @@ async function testWebhookEndpoint() {
 
   // Configuration
   const PORT = process.env.PORT || 80;
-  const baseUrl = `http://:${PORT}`;
+  const baseUrl = `http://104.247.166.151:${PORT}`;
   const webhookUrl = `${baseUrl}/webhook`;
 
   // Sample trading signal data
@@ -17,7 +17,7 @@ async function testWebhookEndpoint() {
     datetime: new Date().toLocaleString('tr-TR'),
     action: "BUY",
     symbol: "EURUSD",
-    price: "1.11646"
+    price: "1.11621"
   };
 
   console.log('📊 Testing webhook endpoint:', webhookUrl);
