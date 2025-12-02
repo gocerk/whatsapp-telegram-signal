@@ -19,8 +19,8 @@ const newsSchema = new mongoose.Schema({
   content: { type: String, required: true },
   attachments: [{ type: String }]
 }, {
-  _id: false, // Disable automatic _id generation since we're providing our own
-  timestamps: false // Disable automatic timestamps since we have custom date fields
+  _id: false, 
+  timestamps: false
 });
 
 const News = mongoose.model('News', newsSchema);

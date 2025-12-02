@@ -1,4 +1,4 @@
-const axios = require('axios');
+const puppeteer = require('puppeteer');
 
 // Logging utility
 const log = (level, message, data = null) => {
@@ -9,59 +9,105 @@ const log = (level, message, data = null) => {
   }
 };
 
-// Chart image service using chart-img.com API v2 with advanced features
+// Chart image service using Puppeteer to capture TradingView charts
 class ChartService {
   constructor() {
-    this.baseURL = 'https://api.chart-img.com/v2/tradingview/advanced-chart';
-    this.apiKey = process.env.CHART_IMG_API_KEY;
     this.tradingViewSessionId = process.env.TRADINGVIEW_SESSION_ID;
     this.tradingViewSessionIdSign = process.env.TRADINGVIEW_SESSION_ID_SIGN;
   }
 
   async getChartImage(symbol, options = {}) {
     try {
-      if (!this.apiKey) {
-        log('warn', 'Chart API key not configured, skipping chart image');
+      if (!this.tradingViewSessionId || !this.tradingViewSessionIdSign) {
+        log('warn', 'TradingView session credentials not configured, skipping chart image');
         return null;
       }
 
-      // Build chart configuration with advanced options
-      const chartConfig = this.buildChartConfig(symbol, options);
+      log('info', `Fetching chart image for ${symbol} using Puppeteer`);
 
-      log('info', `Fetching chart image for ${symbol}`, chartConfig);
-
-      // Build headers with optional TradingView session authentication
-      const headers = this.buildHeaders();
-
-      const response = await axios.post(this.baseURL, chartConfig, {
-        headers,
+      // Format symbol for TradingView URL
+      const formattedSymbol = this.formatSymbol(symbol);
+      
+      // Build TradingView chart URL
+      const chartUrl = `https://tr.tradingview.com/chart/4atOlnQu?symbol=${encodeURIComponent(formattedSymbol)}`;
+      
+      // Launch browser
+      const browser = await puppeteer.launch({
+        headless: true,
+        defaultViewport: { 
+          width: options.width || 800, 
+          height: options.height || 600 
+        }
       });
+      
+      const page = await browser.newPage();
 
-      console.log(response.data);
+      // Set cookies for TradingView authentication
+      const cookies = [
+        {
+          name: 'sessionid',
+          value: this.tradingViewSessionId,
+          domain: '.tradingview.com',
+          path: '/',
+          httpOnly: true,
+          secure: true
+        },
+        {
+          name: 'sessionid_sign',
+          value: this.tradingViewSessionIdSign,
+          domain: '.tradingview.com',
+          path: '/',
+          httpOnly: true,
+          secure: true
+        }
+      ];
 
-      if (response.status === 200) {
-        log('info', `Chart image fetched successfully for ${symbol}`, {
-          size: response.data.length,
-          contentType: response.headers['content-type']
-        });
-        
-        return {
-          buffer: response.data,
-          contentType: response.headers['content-type'] || 'image/png'
-        };
+      await page.setCookie(...cookies);
+
+      // Navigate to chart
+      await page.goto(chartUrl, { waitUntil: 'networkidle2' });
+
+      // Wait for chart to load
+      try {
+        await page.waitForSelector('.chart-gui-wrapper', { timeout: 20000 });
+        // Extra wait for indicators and data to fully render
+        await new Promise(r => setTimeout(r, 3000));
+      } catch (e) {
+        log('warn', 'Timeout waiting for chart to load, proceeding anyway');
       }
 
-      log('warn', `Unexpected response status: ${response.status}`);
-      return null;
+      // Take screenshot of chart area
+      const element = await page.$('.layout__area--center');
+      let screenshotBuffer;
+      
+      if (element) {
+        screenshotBuffer = await element.screenshot({ 
+          type: 'png'
+        });
+      } else {
+        log('warn', 'Chart area not found, taking full page screenshot');
+        screenshotBuffer = await page.screenshot({ 
+          type: 'png',
+          fullPage: false 
+        });
+      }
+
+      await browser.close();
+
+      log('info', `Chart image captured successfully for ${symbol}`, {
+        size: screenshotBuffer.length,
+        contentType: 'image/png'
+      });
+      
+      return {
+        buffer: screenshotBuffer,
+        contentType: 'image/png'
+      };
 
     } catch (error) {
-      console.log(error);
       log('error', 'Failed to fetch chart image', {
         symbol,
-        error: error.response?.data ?
-          Buffer.from(error.response.data).toString() :
-          error.message,
-        status: error.response?.status
+        error: error.message
       });
       return null;
     }
@@ -72,70 +118,6 @@ class ChartService {
     return this.getChartImage(symbol, options);
   }
 
-  // Build comprehensive chart configuration
-  buildChartConfig(symbol, options = {}) {
-    const config = {
-      symbol: symbol,
-      interval: options.interval || '1h',
-      width: options.width || 800,
-      height: options.height || 600,
-      theme: options.theme || 'dark',
-      style: options.style || 'candle',
-      scale: options.scale || 'regular',
-      session: options.session || 'regular',
-      timezone: options.timezone || 'Etc/UTC',
-    };
-
-    // Add range if specified
-    if (options.range) {
-      config.range = options.range;
-    }
-    
-    // Add drawings if specified
-    if (options.drawings) {
-      config.drawings = options.drawings;
-    }
-
-    // Add chart positioning
-    if (options.shiftLeft) {
-      config.shiftLeft = options.shiftLeft;
-    }
-    if (options.shiftRight) {
-      config.shiftRight = options.shiftRight;
-    }
-
-    // Add override settings
-    if (options.override) {
-      config.override = options.override;
-    }
-
-    // Add watermark if specified
-    if (options.watermark) {
-      config.watermark = options.watermark;
-      config.watermarkSize = options.watermarkSize || 16;
-      config.watermarkOpacity = options.watermarkOpacity || 1.0;
-    }
-
-    return config;
-  }
-
-  // Build request headers with optional TradingView session authentication
-  buildHeaders() {
-    const headers = {
-      'x-api-key': this.apiKey,
-    };
-
-    // Add TradingView session authentication if available
-    if (this.tradingViewSessionId && this.tradingViewSessionIdSign) {
-      headers['tradingview-session-id'] = this.tradingViewSessionId;
-      headers['tradingview-session-id-sign'] = this.tradingViewSessionIdSign;
-      log('info', 'Using TradingView session authentication for premium data access');
-    }
-
-    console.log('Headers:', headers);
-
-    return headers;
-  }
 
   // Create advanced chart configuration for trading signals
   createSignalChart(symbol, signalData, options = {}) {
@@ -255,21 +237,12 @@ class ChartService {
 
   // Validate configuration including session credentials
   validateConfiguration() {
-    if (!this.apiKey) {
-      log('warn', 'Chart API key not configured - chart images will be disabled');
+    if (!this.tradingViewSessionId || !this.tradingViewSessionIdSign) {
+      log('warn', 'TradingView session credentials not configured - chart images will be disabled');
       return false;
     }
     
-    let configStatus = 'Chart service configuration validated successfully';
-    
-    if (this.tradingViewSessionId && this.tradingViewSessionIdSign) {
-      configStatus += ' with TradingView session authentication';
-      log('info', 'TradingView session credentials detected - premium data access enabled');
-    } else {
-      log('info', 'TradingView session credentials not configured - using public data only');
-    }
-    
-    log('info', configStatus);
+    log('info', 'Chart service configuration validated successfully with TradingView session authentication');
     return true;
   }
 

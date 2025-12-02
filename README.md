@@ -5,12 +5,14 @@ A Node.js application that receives TradingView webhook signals and forwards the
 ## Features
 
 - **WhatsApp Integration**: Send text messages and images via Twilio WhatsApp API
+- **Telegram Integration**: Send trading signals to Telegram channels/groups
 - **Advanced Chart Generation**: Create professional TradingView charts with indicators and drawings
 - **TradingView Session Support**: Access premium data with session authentication
 - **Custom Indicators**: Support for 100+ technical indicators with customization
 - **Chart Drawings**: Add trend lines, support/resistance levels, and annotations
 - **Layout Charts**: Use custom TradingView layouts with community indicators
 - **Signal Processing**: Automated webhook processing from TradingView alerts
+- **Dual Platform Support**: Send signals to both WhatsApp and Telegram simultaneously
 - **Comprehensive logging and error handling
 
 ## Setup
@@ -30,15 +32,21 @@ npm install
    - Follow the instructions to join your sandbox
    - Note your sandbox WhatsApp number (e.g., `whatsapp:+14155238886`)
 
-### 3. Environment Configuration
+### 3. Telegram Bot Setup
 
-Copy `.env.example` to `.env` and fill in your credentials:
+1. Create a Telegram bot:
+   - Open Telegram and search for [@BotFather](https://t.me/botfather)
+   - Send `/newbot` and follow instructions
+   - Save your bot token (e.g., `8559578423:AAEfQzBT9NIzloxvNhesmXE8aninuQdw_Gc`)
 
-```bash
-cp .env.example .env
-```
+2. Get your Chat ID:
+   - For channels: Forward a message from your channel to [@userinfobot](https://t.me/userinfobot)
+   - For groups: Add [@userinfobot](https://t.me/userinfobot) to your group and send `/start`
+   - The chat ID will be shown (e.g., `-1003438071390`)
 
-Edit `.env` with your Twilio credentials:
+### 4. Environment Configuration
+
+Create a `.env` file in the project root with your credentials:
 
 ```env
 # Twilio Configuration for WhatsApp
@@ -48,6 +56,10 @@ TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 
 # WhatsApp Recipients (comma-separated for multiple numbers)
 WHATSAPP_TO_NUMBERS=whatsapp:+1234567890,whatsapp:+0987654321
+
+# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+TELEGRAM_CHAT_ID=your_telegram_chat_id_here
 
 # Chart Image API Configuration (chart-img.com)
 CHART_IMG_API_KEY=your_chart_img_api_key_here
@@ -61,7 +73,7 @@ TRADINGVIEW_SESSION_ID_SIGN=your_tradingview_sessionid_sign_here
 PORT=3000
 ```
 
-### 4. WhatsApp Sandbox Setup
+### 5. WhatsApp Sandbox Setup
 
 For testing, recipients need to join your Twilio WhatsApp sandbox:
 
@@ -73,7 +85,7 @@ For testing, recipients need to join your Twilio WhatsApp sandbox:
 
 ### TradingView Webhook Integration
 
-The main use case is receiving webhook signals from TradingView:
+The main use case is receiving webhook signals from TradingView. When a webhook is received, the signal is automatically sent to **both WhatsApp and Telegram**:
 
 ```bash
 # Start the server
@@ -92,6 +104,8 @@ npm start
   "price": "{{close}}"
 }
 ```
+
+**Note:** The webhook handler will attempt to send to both WhatsApp and Telegram. If one service fails, the other will still be attempted. The response will indicate which services succeeded.
 
 ### Advanced Chart Service Usage
 
@@ -278,6 +292,33 @@ Get message history for a contact.
 
 #### `validateConfiguration()`
 Validate that all required environment variables are set.
+
+### TelegramService Methods
+
+#### `sendMessage(message, parseMode)`
+Send a text message to the configured Telegram chat.
+
+- `message`: Text message to send
+- `parseMode`: Optional parse mode ('HTML' or 'Markdown', default: 'HTML')
+
+#### `sendPhoto(photo, caption, parseMode)`
+Send a photo with caption to Telegram.
+
+- `photo`: Image buffer, URL string, or object with buffer property
+- `caption`: Optional caption text
+- `parseMode`: Optional parse mode
+
+#### `sendFormattedMessage(signalData, chartImage)`
+Send a formatted trading signal message.
+
+- `signalData`: Signal data object with `title`, `datetime`, `action`, `symbol`, `price`
+- `chartImage`: Optional image buffer or URL
+
+#### `formatTradingViewMessage(data)`
+Format TradingView webhook data into a readable message format.
+
+#### `validateConfiguration()`
+Validate that Telegram bot token and chat ID are configured.
 
 ## Important Notes
 
