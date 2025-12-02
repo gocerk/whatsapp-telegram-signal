@@ -123,15 +123,17 @@ _Trading signal from TradingView_`;
 
     try {
       // Handle different photo formats
-      let photoData;
       if (Buffer.isBuffer(photo) || photo.buffer) {
         // For buffer, we need to send as multipart/form-data
         const FormData = require('form-data');
         const form = new FormData();
         form.append('chat_id', this.chatId);
-        form.append('photo', photo.buffer || photo, {
+        
+        // Handle buffer correctly - extract the actual buffer
+        const actualBuffer = Buffer.isBuffer(photo) ? photo : photo.buffer;
+        form.append('photo', actualBuffer, {
           filename: 'chart.png',
-          contentType: photo.contentType || 'image/png'
+          contentType: 'image/png'
         });
         if (caption) {
           form.append('caption', caption);

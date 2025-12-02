@@ -1,10 +1,12 @@
 const puppeteer = require('puppeteer');
+require('dotenv').config('../.env');
 
-const getChartImage = async (currency) => {
+(async (currency) => {
     // 1. Tarayıcıyı Başlat
     const browser = await puppeteer.launch({
         headless: true, // Arka planda çalışması için true, görmek için false yapabilirsiniz
-        defaultViewport: { width: 1440, height: 900 } // Çıktı çözünürlüğü
+        defaultViewport: { width: 1440, height: 900 }, // Çıktı çözünürlüğü
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     
     const page = await browser.newPage();
@@ -73,6 +75,6 @@ const getChartImage = async (currency) => {
     console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
 
     await browser.close();
-};
+})("BINANCE:BTCUSDT");
 
-module.exports = { getChartImage };
+// module.exports = { getChartImage };
