@@ -84,17 +84,67 @@ async function handleTextMessage(req, res) {
       timestamp: new Date().toISOString()
     };
 
+    // Get chart image for the symbol
+    let chartImage = null;
+    if (messageData.symbol) {
+      try {
+        const formattedSymbol = chartService.formatSymbol(messageData.symbol);
+        log('info', `Fetching chart for symbol: ${formattedSymbol}`);
+        
+        // Get chart image with basic options
+        const chartOptions = {
+          width: 800,
+          height: 600
+        };
+
+        const { buffer: chartBuffer } = await chartService.getChartImage(formattedSymbol, chartOptions);
+        if (chartBuffer) {
+          chartImage = chartBuffer; // For WhatsApp and Telegram (original buffer)
+
+          log('info', 'Chart image captured successfully', {
+            sessionAuth: chartService.hasSessionAuth(),
+            size: chartBuffer.buffer.length,
+            contentType: chartBuffer.contentType,
+            savedFile: chartBuffer.filename
+          });
+        }
+      } catch (chartError) {
+        log('warn', 'Failed to generate chart image, proceeding without chart', {
+          error: chartError.message,
+          symbol: messageData.symbol,
+          sessionAuth: chartService.hasSessionAuth()
+        });
+      }
+    }
+
+    // Prepare message text
+    const messageText = `${messageData.msg}\nSymbol: ${messageData.symbol}`;
+
     // Send results tracking
     const results = {
       whatsapp: null,
       telegram: null
     };
 
-    // Send to WhatsApp (text only, no chart)
+    // Send to WhatsApp (with chart if available)
     try {
-      await whatsappService.sendMessage(WHATSAPP_GROUP_ID, `${messageData.msg}\nSymbol: ${messageData.symbol}`);
+      if (chartImage) {
+        // Prepare signal data format for WhatsApp sendFormattedMessageToGroup
+        const signalData = {
+          title: messageData.msg,
+          datetime: messageData.timestamp,
+          action: '',
+          symbol: messageData.symbol,
+          price: ''
+        };
+        await whatsappService.sendFormattedMessageToGroup(WHATSAPP_GROUP_ID, signalData, chartImage);
+      } else {
+        await whatsappService.sendMessage(WHATSAPP_GROUP_ID, messageText);
+      }
       results.whatsapp = { success: true };
-      log('info', 'Text message sent to WhatsApp successfully');
+      log('info', 'Text message sent to WhatsApp successfully', {
+        chartIncluded: !!chartImage
+      });
     } catch (whatsappError) {
       log('error', 'Failed to send text to WhatsApp', {
         error: whatsappError.message
@@ -102,11 +152,17 @@ async function handleTextMessage(req, res) {
       results.whatsapp = { success: false, error: whatsappError.message };
     }
 
-    // Send to Telegram (text only, no chart)
+    // Send to Telegram (with chart if available)
     try {
-      await telegramService.sendMessage(`${messageData.msg}\nSymbol: ${messageData.symbol}`);
+      if (chartImage) {
+        await telegramService.sendPhoto(chartImage, messageText, 'HTML');
+      } else {
+        await telegramService.sendMessage(messageText);
+      }
       results.telegram = { success: true };
-      log('info', 'Text message sent to Telegram successfully');
+      log('info', 'Text message sent to Telegram successfully', {
+        chartIncluded: !!chartImage
+      });
     } catch (telegramError) {
       log('error', 'Failed to send text to Telegram', {
         error: telegramError.message
@@ -125,12 +181,14 @@ async function handleTextMessage(req, res) {
       msg: messageData.msg,
       symbol: messageData.symbol,
       whatsapp: results.whatsapp.success,
-      telegram: results.telegram.success
+      telegram: results.telegram.success,
+      chartIncluded: !!chartImage
     });
 
     res.status(200).json({
       success: true,
       message: 'Text message sent successfully',
+      chartIncluded: !!chartImage,
       results: {
         whatsapp: results.whatsapp.success,
         telegram: results.telegram.success
