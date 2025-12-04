@@ -11,6 +11,11 @@
     "test:send": "node test-groups.js send",
     "test:signal": "node test-groups.js signal",
     "test:message": "node test-send-message.js",
+    "test:whatsapp-groups": "node test-whatsapp-groups.js",
+    "test:whatsapp-groups:list": "node test-whatsapp-groups.js list",
+    "test:conversation": "node test-create-conversation.js",
+    "test:conversation:create": "node test-create-conversation.js create",
+    "test:conversation:list": "node test-create-conversation.js list",
     "test:telegram": "node test-telegram-photo.js",
     "test:telegram:quick": "node test-telegram-photo.js --quick",
     "send:message": "node test-send-message.js"
