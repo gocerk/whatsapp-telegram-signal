@@ -45,6 +45,85 @@ const whatsappService = new WhatsAppService();
 const telegramService = new TelegramService();
 const chartService = new ChartService();
 
+// Handle simple text message format
+async function handleTextMessage(req, res) {
+  try {
+    const { msg, symbol } = req.body;
+    
+    // Prepare simple message data
+    const messageData = {
+      msg: msg.trim(),
+      symbol: symbol.trim(),
+      timestamp: new Date().toISOString()
+    };
+
+    // Send results tracking
+    const results = {
+      whatsapp: null,
+      telegram: null
+    };
+
+    // Send to WhatsApp (text only, no chart)
+    try {
+      await whatsappService.sendMessage(WHATSAPP_GROUP_ID, `${messageData.msg}\nSymbol: ${messageData.symbol}`);
+      results.whatsapp = { success: true };
+      log('info', 'Text message sent to WhatsApp successfully');
+    } catch (whatsappError) {
+      log('error', 'Failed to send text to WhatsApp', {
+        error: whatsappError.message
+      });
+      results.whatsapp = { success: false, error: whatsappError.message };
+    }
+
+    // Send to Telegram (text only, no chart)
+    try {
+      await telegramService.sendMessage(`${messageData.msg}\nSymbol: ${messageData.symbol}`);
+      results.telegram = { success: true };
+      log('info', 'Text message sent to Telegram successfully');
+    } catch (telegramError) {
+      log('error', 'Failed to send text to Telegram', {
+        error: telegramError.message
+      });
+      results.telegram = { success: false, error: telegramError.message };
+    }
+
+    // Check if at least one service succeeded
+    const hasSuccess = results.whatsapp?.success || results.telegram?.success;
+    
+    if (!hasSuccess) {
+      throw new Error('Failed to send text message to both WhatsApp and Telegram');
+    }
+
+    log('info', 'Text message processed successfully', {
+      msg: messageData.msg,
+      symbol: messageData.symbol,
+      whatsapp: results.whatsapp.success,
+      telegram: results.telegram.success
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Text message sent successfully',
+      results: {
+        whatsapp: results.whatsapp.success,
+        telegram: results.telegram.success
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    log('error', 'Error processing text webhook', {
+      error: error.message,
+      stack: error.stack
+    });
+
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to process text message'
+    });
+  }
+}
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
@@ -64,13 +143,18 @@ app.post('/webhook', async (req, res) => {
   try {
     log('info', 'Received webhook payload', req.body);
 
-    // Validate required fields
+    // Check if this is a simple text message format
+    if (req.body.msg && req.body.symbol) {
+      return await handleTextMessage(req, res);
+    }
+
+    // Validate required fields for trading signal format
     const { title, datetime, action, symbol, price } = req.body;
     
     if (!title || !action || !symbol || !price) {
       log('warn', 'Invalid webhook payload - missing required fields', req.body);
       return res.status(400).json({
-        error: 'Missing required fields: title, action, symbol, price'
+        error: 'Missing required fields: title, action, symbol, price (or use msg + symbol for text format)'
       });
     }
 
