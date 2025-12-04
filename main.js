@@ -380,7 +380,6 @@ app.post('/webhook', async (req, res) => {
 
     // Get chart image for the symbol
     let chartImage = null;
-    let chartImageForTelegram = null;
     try {
       const formattedSymbol = chartService.formatSymbol(symbol);
       log('info', `Fetching chart for symbol: ${formattedSymbol}`);
@@ -394,29 +393,7 @@ app.post('/webhook', async (req, res) => {
       const { buffer: chartBuffer } = await chartService.getChartImage(formattedSymbol, chartOptions);
       if (chartBuffer) {
         chartImage = chartBuffer; // For WhatsApp (original buffer)
-        
-        // For Telegram, read the saved file as buffer
-        if (chartBuffer.filepath && fs.existsSync(chartBuffer.filepath)) {
-          try {
-            const savedImageBuffer = fs.readFileSync(chartBuffer.filepath);
-            chartImageForTelegram = {
-              buffer: savedImageBuffer,
-              contentType: 'image/png'
-            };
-            log('info', 'Chart image read from saved file for Telegram', {
-              filepath: chartBuffer.filepath,
-              size: savedImageBuffer.length
-            });
-          } catch (readError) {
-            log('warn', 'Failed to read saved chart image, using original buffer', {
-              error: readError.message
-            });
-            chartImageForTelegram = chartBuffer;
-          }
-        } else {
-          chartImageForTelegram = chartBuffer;
-        }
-        
+
         log('info', 'Chart image captured successfully', {
           sessionAuth: chartService.hasSessionAuth(),
           size: chartBuffer.buffer.length,
@@ -486,7 +463,7 @@ app.post('/webhook', async (req, res) => {
 
     // Send to Telegram
     try {
-      await telegramService.sendFormattedMessage(signalData, chartImageForTelegram);
+      await telegramService.sendFormattedMessage(signalData, chartImage);
       results.telegram = { success: true };
       log('info', 'Signal sent to Telegram successfully');
     } catch (telegramError) {
@@ -507,7 +484,7 @@ app.post('/webhook', async (req, res) => {
       symbol,
       action: signalData.action,
       price,
-      chartIncluded: !!(chartImage || chartImageForTelegram),
+      chartIncluded: chartImage,
       whatsapp: results.whatsapp.success,
       telegram: results.telegram.success
     });
@@ -515,7 +492,7 @@ app.post('/webhook', async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Signal sent successfully',
-      chartIncluded: !!(chartImage || chartImageForTelegram),
+      chartIncluded: chartImage,
       results: {
         whatsapp: results.whatsapp.success,
         telegram: results.telegram.success
