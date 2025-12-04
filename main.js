@@ -2,9 +2,12 @@ require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const cron = require('node-cron');
+const mongoose = require('mongoose');
 const WhatsAppService = require('./services/whatsapp');
 const TelegramService = require('./services/telegram');
 const ChartService = require('./services/chart');
+const newsChecker = require('./services/newsChecker');
 
 const app = express();
 const PORT = process.env.PORT || 80;
@@ -40,6 +43,29 @@ const log = (level, message, data = null) => {
     console.log(JSON.stringify(data, null, 2));
   }
 };
+
+// Initialize MongoDB connection
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
+if (MONGODB_URI) {
+  mongoose.connect(MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+  }).then(() => {
+    log('info', 'MongoDB connected successfully');
+  }).catch((error) => {
+    log('error', 'MongoDB connection error', { error: error.message });
+  });
+
+  mongoose.connection.on('error', (error) => {
+    log('error', 'MongoDB connection error', { error: error.message });
+  });
+
+  mongoose.connection.on('disconnected', () => {
+    log('warn', 'MongoDB disconnected');
+  });
+} else {
+  log('warn', 'MONGODB_URI not set in environment variables');
+}
 
 // Initialize services
 const whatsappService = new WhatsAppService();
@@ -578,6 +604,41 @@ app.listen(PORT, () => {
     log('warn', 'Some services not properly configured', servicesStatus);
   } else {
     log('error', 'No messaging services properly configured');
+  }
+
+  // Setup news checker cron job (every 30 minutes)
+  if (telegramValid) {
+    log('info', 'Setting up news checker cron job (every 30 minutes)');
+    
+    // Run immediately on startup (optional - you can remove this if you don't want it)
+    // newsChecker.checkAndSendNewNews().catch(err => {
+    //   log('error', 'Initial news check failed', { error: err.message });
+    // });
+    
+    // Schedule cron job to run every 30 minutes
+    cron.schedule('*/30 * * * *', async () => {
+      log('info', 'Running scheduled news check...');
+      try {
+        const result = await newsChecker.checkAndSendNewNews();
+        if (result.success) {
+          log('info', 'Scheduled news check completed', {
+            newNewsCount: result.newNewsCount,
+            totalChecked: result.totalChecked
+          });
+        } else {
+          log('error', 'Scheduled news check failed', { error: result.error });
+        }
+      } catch (error) {
+        log('error', 'Error in scheduled news check', {
+          error: error.message,
+          stack: error.stack
+        });
+      }
+    });
+    
+    log('info', 'News checker cron job scheduled successfully (runs every 30 minutes)');
+  } else {
+    log('warn', 'News checker cron job not started - Telegram service not configured');
   }
 });
 

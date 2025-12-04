@@ -16,8 +16,8 @@ async function testWebhookEndpoint() {
     title: "Yeni İşlem Önerisi",
     datetime: new Date().toLocaleString('tr-TR'),
     action: "BUY",
-    symbol: "EURUSD",
-    price: "1.11621"
+    symbol: "BTCUSD",
+    price: "45000.00"
   };
 
   console.log('📊 Testing webhook endpoint:', webhookUrl);
