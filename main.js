@@ -30,6 +30,7 @@ app.use((req, res, next) => {
 
 // Configuration
 const WHATSAPP_GROUP_ID = process.env.WHATSAPP_TO_NUMBERS;
+const WHATSAPP_GROUPS = process.env.WHATSAPP_GROUPS; // Comma-separated list of group IDs
 
 // Logging utility
 const log = (level, message, data = null) => {
@@ -138,6 +139,208 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Get configured WhatsApp groups
+app.get('/whatsapp/groups', (req, res) => {
+  try {
+    const groups = whatsappService.getConfiguredGroups();
+    res.json({
+      success: true,
+      groups: groups,
+      count: groups.length
+    });
+  } catch (error) {
+    log('error', 'Failed to retrieve WhatsApp groups', {
+      error: error.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Send message to specific WhatsApp group
+app.post('/whatsapp/send', async (req, res) => {
+  try {
+    const { groupId, message } = req.body;
+    
+    if (!groupId || !message) {
+      return res.status(400).json({
+        error: 'Missing required fields: groupId, message'
+      });
+    }
+
+    const result = await whatsappService.sendMessageToGroup(groupId, message);
+    
+    res.json({
+      success: true,
+      result: result
+    });
+  } catch (error) {
+    log('error', 'Failed to send message to WhatsApp group', {
+      error: error.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Twilio Conversations API endpoints
+
+// Create a new conversation (group)
+app.post('/whatsapp/conversations/create', async (req, res) => {
+  try {
+    const { friendlyName, phoneNumbers } = req.body;
+    
+    if (!friendlyName || !phoneNumbers || !Array.isArray(phoneNumbers) || phoneNumbers.length === 0) {
+      return res.status(400).json({
+        error: 'Missing required fields: friendlyName (string), phoneNumbers (array)'
+      });
+    }
+
+    const result = await whatsappService.createConversationWithParticipants(friendlyName, phoneNumbers);
+    
+    res.json({
+      success: result.success,
+      conversation: {
+        conversationSid: result.conversationSid,
+        friendlyName: result.friendlyName,
+        participants: result.participants,
+        errors: result.errors,
+        totalRequested: result.totalRequested,
+        totalAdded: result.totalAdded,
+        totalFailed: result.totalFailed
+      }
+    });
+  } catch (error) {
+    log('error', 'Failed to create conversation', {
+      error: error.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// List all conversations
+app.get('/whatsapp/conversations', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const result = await whatsappService.listConversations(limit);
+    
+    res.json({
+      success: result.success,
+      conversations: result.conversations,
+      count: result.count
+    });
+  } catch (error) {
+    log('error', 'Failed to list conversations', {
+      error: error.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get conversation details
+app.get('/whatsapp/conversations/:conversationSid', async (req, res) => {
+  try {
+    const { conversationSid } = req.params;
+    const result = await whatsappService.getConversation(conversationSid);
+    
+    res.json(result);
+  } catch (error) {
+    log('error', 'Failed to get conversation', {
+      error: error.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// List participants in a conversation
+app.get('/whatsapp/conversations/:conversationSid/participants', async (req, res) => {
+  try {
+    const { conversationSid } = req.params;
+    const result = await whatsappService.listConversationParticipants(conversationSid);
+    
+    res.json(result);
+  } catch (error) {
+    log('error', 'Failed to list conversation participants', {
+      error: error.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Add participant to conversation
+app.post('/whatsapp/conversations/:conversationSid/participants', async (req, res) => {
+  try {
+    const { conversationSid } = req.params;
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+      return res.status(400).json({
+        error: 'Missing required field: phoneNumber'
+      });
+    }
+
+    const result = await whatsappService.addParticipantToConversation(conversationSid, phoneNumber);
+    
+    res.json({
+      success: result.success,
+      participant: result
+    });
+  } catch (error) {
+    log('error', 'Failed to add participant to conversation', {
+      error: error.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Send message to conversation
+app.post('/whatsapp/conversations/:conversationSid/messages', async (req, res) => {
+  try {
+    const { conversationSid } = req.params;
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({
+        error: 'Missing required field: message'
+      });
+    }
+
+    const result = await whatsappService.sendMessageToConversation(conversationSid, message);
+    
+    res.json({
+      success: result.success,
+      message: result
+    });
+  } catch (error) {
+    log('error', 'Failed to send message to conversation', {
+      error: error.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Main webhook endpoint for TradingView signals
 app.post('/webhook', async (req, res) => {
   try {
@@ -237,9 +440,43 @@ app.post('/webhook', async (req, res) => {
 
     // Send to WhatsApp
     try {
-      await whatsappService.sendFormattedMessage(WHATSAPP_GROUP_ID, signalData, chartImage);
-      results.whatsapp = { success: true };
-      log('info', 'Signal sent to WhatsApp successfully');
+      // Check if specific group(s) are requested in the webhook payload
+      const targetGroups = req.body.groupId || req.body.groupIds || WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
+      
+      if (Array.isArray(targetGroups) || (typeof targetGroups === 'string' && targetGroups.includes(','))) {
+        // Multiple groups specified
+        const groupIds = Array.isArray(targetGroups) 
+          ? targetGroups 
+          : targetGroups.split(',').map(g => g.trim());
+        
+        log('info', 'Sending to multiple WhatsApp groups', { groupCount: groupIds.length });
+        const groupResults = await whatsappService.sendFormattedMessageToMultipleGroups(
+          groupIds, 
+          signalData, 
+          chartImage
+        );
+        results.whatsapp = {
+          success: groupResults.success,
+          total: groupResults.total,
+          succeeded: groupResults.succeeded,
+          failed: groupResults.failed,
+          groups: groupResults.groups
+        };
+        log('info', 'Signal sent to WhatsApp groups', {
+          total: groupResults.total,
+          succeeded: groupResults.succeeded,
+          failed: groupResults.failed
+        });
+      } else if (targetGroups) {
+        // Single group specified
+        const groupId = typeof targetGroups === 'string' ? targetGroups.trim() : targetGroups;
+        log('info', 'Sending to single WhatsApp group', { groupId });
+        await whatsappService.sendFormattedMessageToGroup(groupId, signalData, chartImage);
+        results.whatsapp = { success: true, groupId };
+        log('info', 'Signal sent to WhatsApp group successfully');
+      } else {
+        throw new Error('No WhatsApp group ID configured or provided');
+      }
     } catch (whatsappError) {
       log('error', 'Failed to send to WhatsApp', {
         error: whatsappError.message

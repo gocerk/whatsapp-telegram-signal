@@ -55,7 +55,13 @@ TWILIO_AUTH_TOKEN=your_twilio_auth_token_here
 TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 
 # WhatsApp Recipients (comma-separated for multiple numbers)
+# Can be used for both individual numbers and groups
 WHATSAPP_TO_NUMBERS=whatsapp:+1234567890,whatsapp:+0987654321
+
+# WhatsApp Groups (comma-separated list of group IDs)
+# If not set, WHATSAPP_TO_NUMBERS will be used as groups
+# Group IDs should be in format: whatsapp:+1234567890
+WHATSAPP_GROUPS=whatsapp:+1234567890,whatsapp:+0987654321
 
 # Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
@@ -168,6 +174,169 @@ const chartImage = { url: 'https://chart-url.com/image.png' };
 await whatsapp.sendFormattedMessage('whatsapp:+1234567890', signal, chartImage);
 ```
 
+### WhatsApp Group Messaging
+
+The service now supports sending messages to specific WhatsApp groups:
+
+```javascript
+const WhatsAppService = require('./services/whatsapp');
+const whatsapp = new WhatsAppService();
+
+// Send to a specific group
+await whatsapp.sendMessageToGroup('whatsapp:+1234567890', 'Hello Group!');
+
+// Send formatted trading signal to a group
+await whatsapp.sendFormattedMessageToGroup('whatsapp:+1234567890', signal, chartImage);
+
+// Send to multiple groups at once
+const groupIds = ['whatsapp:+1234567890', 'whatsapp:+0987654321'];
+await whatsapp.sendMessageToMultipleGroups(groupIds, 'Broadcast message');
+
+// Send formatted signal to multiple groups
+await whatsapp.sendFormattedMessageToMultipleGroups(groupIds, signal, chartImage);
+
+// Get configured groups
+const groups = whatsapp.getConfiguredGroups();
+console.log(`Configured ${groups.length} groups`);
+```
+
+**Webhook with Group Selection:**
+
+You can specify which group(s) to send to in the webhook payload:
+
+```json
+{
+  "title": "BUY Signal",
+  "action": "BUY",
+  "symbol": "BTCUSDT",
+  "price": "45000",
+  "groupId": "whatsapp:+1234567890"
+}
+```
+
+Or send to multiple groups:
+
+```json
+{
+  "title": "BUY Signal",
+  "action": "BUY",
+  "symbol": "BTCUSDT",
+  "price": "45000",
+  "groupIds": ["whatsapp:+1234567890", "whatsapp:+0987654321"]
+}
+```
+
+If `groupId` or `groupIds` are not provided, the service will use `WHATSAPP_GROUPS` or `WHATSAPP_TO_NUMBERS` from your `.env` file.
+
+**API Endpoints:**
+
+- `GET /whatsapp/groups` - List all configured WhatsApp groups
+- `POST /whatsapp/send` - Send a message to a specific group
+  ```json
+  {
+    "groupId": "whatsapp:+1234567890",
+    "message": "Your message here"
+  }
+  ```
+
+### Twilio Conversations API (WhatsApp Groups)
+
+The service now supports Twilio Conversations API for creating and managing WhatsApp groups programmatically. This allows you to create actual group conversations with multiple participants.
+
+**Creating a Group with Participants:**
+
+```javascript
+const WhatsAppService = require('./services/whatsapp');
+const whatsapp = new WhatsAppService();
+
+// Create a conversation (group) with multiple participants
+const result = await whatsapp.createConversationWithParticipants(
+  'Trading Group',
+  ['+905541531807', '+38268580338']
+);
+
+console.log(`Group created: ${result.conversationSid}`);
+console.log(`Participants added: ${result.totalAdded}`);
+```
+
+**Sending Messages to Conversations:**
+
+```javascript
+// Send a message to a conversation
+await whatsapp.sendMessageToConversation(
+  'CH44aad621d17e4a069282ae6ab36d2288',
+  'Hello group!'
+);
+
+// Send formatted trading signal to a conversation
+await whatsapp.sendFormattedMessageToConversation(
+  'CH44aad621d17e4a069282ae6ab36d2288',
+  signalData,
+  chartImage
+);
+```
+
+**Managing Conversations:**
+
+```javascript
+// List all conversations
+const conversations = await whatsapp.listConversations();
+
+// Get conversation details
+const conversation = await whatsapp.getConversation('CHxxx');
+
+// List participants in a conversation
+const participants = await whatsapp.listConversationParticipants('CHxxx');
+
+// Add a participant to a conversation
+await whatsapp.addParticipantToConversation('CHxxx', '+1234567890');
+```
+
+**API Endpoints for Conversations:**
+
+- `POST /whatsapp/conversations/create` - Create a new conversation with participants
+  ```json
+  {
+    "friendlyName": "Trading Group",
+    "phoneNumbers": ["+905541531807", "+38268580338"]
+  }
+  ```
+
+- `GET /whatsapp/conversations` - List all conversations
+- `GET /whatsapp/conversations/:conversationSid` - Get conversation details
+- `GET /whatsapp/conversations/:conversationSid/participants` - List participants
+- `POST /whatsapp/conversations/:conversationSid/participants` - Add a participant
+  ```json
+  {
+    "phoneNumber": "+1234567890"
+  }
+  ```
+
+- `POST /whatsapp/conversations/:conversationSid/messages` - Send a message
+  ```json
+  {
+    "message": "Hello group!"
+  }
+  ```
+
+**Test Script:**
+
+```bash
+# Create a group with participants
+node test-create-conversation.js create "Trading Group" "+905541531807" "+38268580338"
+
+# List all conversations
+node test-create-conversation.js list
+
+# Send a message to a conversation
+node test-create-conversation.js send CHxxx "Hello group!"
+
+# List participants
+node test-create-conversation.js participants CHxxx
+```
+
+**Note:** Twilio Conversations API requires that participants have previously interacted with your WhatsApp Business number or you need to use approved message templates for the first message.
+
 ### Testing Scripts
 
 #### List Active Contacts
@@ -175,6 +344,23 @@ await whatsapp.sendFormattedMessage('whatsapp:+1234567890', signal, chartImage);
 npm run test:contacts
 # or
 node test-groups.js list
+```
+
+#### Test WhatsApp Groups
+```bash
+# List configured groups
+npm run test:whatsapp-groups:list
+# or
+node test-whatsapp-groups.js list
+
+# Send message to a specific group
+node test-whatsapp-groups.js send "whatsapp:+1234567890" "Hello Group!"
+
+# Send trading signal to a group
+node test-whatsapp-groups.js signal "whatsapp:+1234567890"
+
+# Send message to all configured groups
+node test-whatsapp-groups.js multiple "Broadcast message"
 ```
 
 #### Send Test Message
