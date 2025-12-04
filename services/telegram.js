@@ -81,22 +81,30 @@ _Trading signal from TradingView_`;
 
   /**
    * Send message to Telegram
+   * @param {string} message - Message text to send
+   * @param {string} parseMode - Parse mode (HTML, Markdown, etc.)
+   * @param {string|number} chatId - Optional chat ID (uses default if not provided)
    */
-  async sendMessage(message, parseMode = 'HTML') {
-    if (!this.botToken || !this.chatId) {
-      throw new Error('TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set in environment variables');
+  async sendMessage(message, parseMode = 'HTML', chatId = null) {
+    if (!this.botToken) {
+      throw new Error('TELEGRAM_BOT_TOKEN must be set in environment variables');
+    }
+
+    const targetChatId = chatId || this.chatId;
+    if (!targetChatId) {
+      throw new Error('TELEGRAM_CHAT_ID must be set in environment variables or provided as parameter');
     }
 
     try {
       const response = await axios.post(`${this.apiUrl}/sendMessage`, {
-        chat_id: this.chatId,
+        chat_id: targetChatId,
         text: message,
         parse_mode: parseMode
       });
 
       log('info', 'Message sent successfully', {
         messageId: response.data.result?.message_id,
-        chatId: this.chatId
+        chatId: targetChatId
       });
 
       return {
@@ -107,7 +115,8 @@ _Trading signal from TradingView_`;
     } catch (error) {
       log('error', 'Failed to send message', {
         error: error.response?.data || error.message,
-        status: error.response?.status
+        status: error.response?.status,
+        chatId: targetChatId
       });
       throw error;
     }

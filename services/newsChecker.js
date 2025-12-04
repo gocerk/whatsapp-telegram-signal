@@ -154,19 +154,49 @@ async function checkAndSendNewNews() {
         
         // Send each new news item to Telegram
         const telegramService = new TelegramService();
+        const additionalGroupId = '-1003148217444'; // Additional Telegram group ID
         
         for (const newsItem of newNews) {
           try {
             const newsId = newsItem._id || newsItem.id;
             const formattedMessage = formatNewsForTelegram(newsItem);
             
-            await telegramService.sendMessage(formattedMessage, 'Markdown');
+            // Send to default chat (if configured)
+            if (telegramService.chatId) {
+              try {
+                await telegramService.sendMessage(formattedMessage, 'Markdown');
+                log('info', `News sent to default Telegram chat`, {
+                  newsId,
+                  chatId: telegramService.chatId
+                });
+              } catch (error) {
+                log('error', `Failed to send news to default Telegram chat`, {
+                  newsId,
+                  error: error.message
+                });
+              }
+            }
             
-            // Mark as sent in MongoDB
+            // Send to additional group
+            try {
+              await telegramService.sendMessage(formattedMessage, 'Markdown', additionalGroupId);
+              log('info', `News sent to additional Telegram group`, {
+                newsId,
+                chatId: additionalGroupId
+              });
+            } catch (error) {
+              log('error', `Failed to send news to additional Telegram group`, {
+                newsId,
+                chatId: additionalGroupId,
+                error: error.message
+              });
+            }
+            
+            // Mark as sent in MongoDB (only if at least one send succeeded)
             await markNewsAsSent(newsItem);
             newNewsCount++;
             
-            log('info', `News sent to Telegram successfully`, {
+            log('info', `News processed successfully`, {
               newsId,
               header: newsItem.header?.substring(0, 50)
             });
@@ -175,7 +205,7 @@ async function checkAndSendNewNews() {
             await new Promise(resolve => setTimeout(resolve, 1000));
             
           } catch (error) {
-            log('error', `Failed to send news to Telegram`, {
+            log('error', `Failed to process news`, {
               newsId: newsItem._id || newsItem.id,
               error: error.message
             });
