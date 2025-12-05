@@ -182,7 +182,6 @@ async function handleTextMessage(req, res) {
       symbol: messageData.symbol,
       whatsapp: results.whatsapp.success,
       telegram: results.telegram.success,
-      chartIncluded: !!chartImage
     });
 
     res.status(200).json({
@@ -568,7 +567,7 @@ app.post('/webhook', async (req, res) => {
       symbol,
       action: signalData.action,
       price,
-      chartIncluded: chartImage,
+      chartIncluded: !!chartImage,
       whatsapp: results.whatsapp.success,
       telegram: results.telegram.success
     });
@@ -576,7 +575,7 @@ app.post('/webhook', async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Signal sent successfully',
-      chartIncluded: chartImage,
+      chartIncluded: !!chartImage,
       results: {
         whatsapp: results.whatsapp.success,
         telegram: results.telegram.success
