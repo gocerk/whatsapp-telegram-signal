@@ -47,10 +47,7 @@ const log = (level, message, data = null) => {
 // Initialize MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
 if (MONGODB_URI) {
-  mongoose.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-  }).then(() => {
+  mongoose.connect(MONGODB_URI).then(() => {
     log('info', 'MongoDB connected successfully');
   }).catch((error) => {
     log('error', 'MongoDB connection error', { error: error.message });
