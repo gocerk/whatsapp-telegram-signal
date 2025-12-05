@@ -130,13 +130,40 @@ async function checkAndSendNewNews() {
           continue;
         }
         
-        // Filter out already sent news by checking MongoDB
+        // Filter out already sent news and news older than 2 days
         const newNews = [];
+        const now = new Date();
+        const twoDaysAgo = new Date(now.getTime() - (2 * 24 * 60 * 60 * 1000)); // 2 days ago
+        
         for (const item of newsItems) {
           const newsId = item._id || item.id;
           if (!newsId) {
             log('warn', 'News item missing ID, skipping', { item });
             continue;
+          }
+          
+          // Check if news is older than 2 days
+          if (item.publishDate) {
+            const publishDate = new Date(item.publishDate);
+            if (isNaN(publishDate.getTime())) {
+              log('warn', 'Invalid publishDate format, skipping date filter', {
+                newsId,
+                publishDate: item.publishDate
+              });
+            } else if (publishDate < twoDaysAgo) {
+              log('info', 'News is older than 2 days, skipping', {
+                newsId,
+                publishDate: publishDate.toISOString(),
+                daysOld: Math.floor((now - publishDate) / (24 * 60 * 60 * 1000))
+              });
+              continue;
+            }
+          } else {
+            // If no publishDate, we'll include it but log a warning
+            log('warn', 'News item missing publishDate, including anyway', {
+              newsId,
+              header: item.header?.substring(0, 50)
+            });
           }
           
           const alreadySent = await isNewsAlreadySent(newsId);
@@ -162,39 +189,11 @@ async function checkAndSendNewNews() {
             const newsId = newsItem._id || newsItem.id;
             const formattedMessage = formatNewsForTelegram(newsItem);
             
-            // Send to default chat (if configured)
-            if (telegramService.chatId) {
-              try {
-                await telegramService.sendMessage(formattedMessage, 'Markdown');
-                log('info', `News sent to default Telegram chat`, {
-                  newsId,
-                  chatId: telegramService.chatId
-                });
-              } catch (error) {
-                const errorCode = error.response?.data?.error_code;
-                const errorDescription = error.response?.data?.description || error.message;
-                
-                if (errorCode === 400 && errorDescription?.includes('chat not found')) {
-                  log('warn', `Bot is not in the default Telegram group. Please add the bot to the group with chat ID: ${telegramService.chatId}`, {
-                    newsId,
-                    chatId: telegramService.chatId,
-                    solution: 'Add the bot to the group/channel and ensure the chat ID is correct'
-                  });
-                } else {
-                  log('error', `Failed to send news to default Telegram chat`, {
-                    newsId,
-                    chatId: telegramService.chatId,
-                    error: errorDescription
-                  });
-                }
-              }
-            }
-            
-            // Send to additional group (if configured)
+            // Send only to additional group (not to default chat)
             if (additionalGroupId) {
               try {
                 await telegramService.sendMessage(formattedMessage, 'Markdown', additionalGroupId);
-                log('info', `News sent to additional Telegram group`, {
+                log('info', `News sent to Telegram group`, {
                   newsId,
                   chatId: additionalGroupId
                 });
@@ -203,19 +202,23 @@ async function checkAndSendNewNews() {
                 const errorDescription = error.response?.data?.description || error.message;
                 
                 if (errorCode === 400 && errorDescription?.includes('chat not found')) {
-                  log('warn', `Bot is not in the additional Telegram group. Please add the bot to the group with chat ID: ${additionalGroupId}`, {
+                  log('warn', `Bot is not in the Telegram group. Please add the bot to the group with chat ID: ${additionalGroupId}`, {
                     newsId,
                     chatId: additionalGroupId,
-                    solution: 'Add the bot to the group/channel or remove TELEGRAM_ADDITIONAL_CHAT_ID from environment variables to disable this feature'
+                    solution: 'Add the bot to the group/channel or set TELEGRAM_ADDITIONAL_CHAT_ID in environment variables'
                   });
                 } else {
-                  log('error', `Failed to send news to additional Telegram group`, {
+                  log('error', `Failed to send news to Telegram group`, {
                     newsId,
                     chatId: additionalGroupId,
                     error: errorDescription
                   });
                 }
               }
+            } else {
+              log('warn', 'TELEGRAM_ADDITIONAL_CHAT_ID not configured, skipping news send', {
+                newsId
+              });
             }
             
             // Mark as sent in MongoDB (only if at least one send succeeded)
