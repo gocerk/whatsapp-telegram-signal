@@ -151,7 +151,7 @@ class ChartService {
 
         // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
         // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
-        await page.mouse.move(startX - 700, startY, { steps: 10 }); 
+        await page.mouse.move(startX - 1000, startY, { steps: 10 }); 
         
         // Fareyi bırak
         await page.mouse.up();
