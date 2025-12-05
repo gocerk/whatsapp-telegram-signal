@@ -102,7 +102,6 @@ async function handleTextMessage(req, res) {
             sessionAuth: chartService.hasSessionAuth(),
             size: chartBuffer.buffer.length,
             contentType: chartBuffer.contentType,
-            savedFile: chartBuffer.filename
           });
         }
       } catch (chartError) {
@@ -276,7 +275,6 @@ app.post('/webhook', async (req, res) => {
           sessionAuth: chartService.hasSessionAuth(),
           size: chartBuffer.buffer.length,
           contentType: chartBuffer.contentType,
-          savedFile: chartBuffer.filename
         });
       }
     } catch (chartError) {
