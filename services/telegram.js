@@ -113,11 +113,34 @@ _Trading signal from TradingView_`;
         data: response.data
       };
     } catch (error) {
-      log('error', 'Failed to send message', {
-        error: error.response?.data || error.message,
-        status: error.response?.status,
-        chatId: targetChatId
-      });
+      const errorData = error.response?.data || {};
+      const errorCode = errorData.error_code;
+      const errorDescription = errorData.description || error.message;
+      
+      // Provide more helpful error messages for common issues
+      if (errorCode === 400 && errorDescription?.includes('chat not found')) {
+        log('warn', 'Chat not found - Bot may not be added to the group/channel', {
+          chatId: targetChatId,
+          solution: 'Ensure the bot is added to the group/channel and the chat ID is correct. For groups, add @userinfobot to get the chat ID.'
+        });
+      } else if (errorCode === 403 && errorDescription?.includes('bot was blocked')) {
+        log('warn', 'Bot was blocked by the user', {
+          chatId: targetChatId
+        });
+      } else if (errorCode === 400 && errorDescription?.includes('message is too long')) {
+        log('warn', 'Message is too long for Telegram (max 4096 characters)', {
+          chatId: targetChatId,
+          messageLength: message?.length
+        });
+      } else {
+        log('error', 'Failed to send message', {
+          error: errorDescription,
+          errorCode: errorCode,
+          status: error.response?.status,
+          chatId: targetChatId
+        });
+      }
+      
       throw error;
     }
   }

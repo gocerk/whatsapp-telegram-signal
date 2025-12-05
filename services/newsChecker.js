@@ -154,7 +154,8 @@ async function checkAndSendNewNews() {
         
         // Send each new news item to Telegram
         const telegramService = new TelegramService();
-        const additionalGroupId = '-1003148217444'; // Additional Telegram group ID
+        // Additional Telegram group ID from environment variable (optional)
+        const additionalGroupId = process.env.TELEGRAM_ADDITIONAL_CHAT_ID || '-1003148217444';
         
         for (const newsItem of newNews) {
           try {
@@ -170,26 +171,51 @@ async function checkAndSendNewNews() {
                   chatId: telegramService.chatId
                 });
               } catch (error) {
-                log('error', `Failed to send news to default Telegram chat`, {
-                  newsId,
-                  error: error.message
-                });
+                const errorCode = error.response?.data?.error_code;
+                const errorDescription = error.response?.data?.description || error.message;
+                
+                if (errorCode === 400 && errorDescription?.includes('chat not found')) {
+                  log('warn', `Bot is not in the default Telegram group. Please add the bot to the group with chat ID: ${telegramService.chatId}`, {
+                    newsId,
+                    chatId: telegramService.chatId,
+                    solution: 'Add the bot to the group/channel and ensure the chat ID is correct'
+                  });
+                } else {
+                  log('error', `Failed to send news to default Telegram chat`, {
+                    newsId,
+                    chatId: telegramService.chatId,
+                    error: errorDescription
+                  });
+                }
               }
             }
             
-            // Send to additional group
-            try {
-              await telegramService.sendMessage(formattedMessage, 'Markdown', additionalGroupId);
-              log('info', `News sent to additional Telegram group`, {
-                newsId,
-                chatId: additionalGroupId
-              });
-            } catch (error) {
-              log('error', `Failed to send news to additional Telegram group`, {
-                newsId,
-                chatId: additionalGroupId,
-                error: error.message
-              });
+            // Send to additional group (if configured)
+            if (additionalGroupId) {
+              try {
+                await telegramService.sendMessage(formattedMessage, 'Markdown', additionalGroupId);
+                log('info', `News sent to additional Telegram group`, {
+                  newsId,
+                  chatId: additionalGroupId
+                });
+              } catch (error) {
+                const errorCode = error.response?.data?.error_code;
+                const errorDescription = error.response?.data?.description || error.message;
+                
+                if (errorCode === 400 && errorDescription?.includes('chat not found')) {
+                  log('warn', `Bot is not in the additional Telegram group. Please add the bot to the group with chat ID: ${additionalGroupId}`, {
+                    newsId,
+                    chatId: additionalGroupId,
+                    solution: 'Add the bot to the group/channel or remove TELEGRAM_ADDITIONAL_CHAT_ID from environment variables to disable this feature'
+                  });
+                } else {
+                  log('error', `Failed to send news to additional Telegram group`, {
+                    newsId,
+                    chatId: additionalGroupId,
+                    error: errorDescription
+                  });
+                }
+              }
             }
             
             // Mark as sent in MongoDB (only if at least one send succeeded)
