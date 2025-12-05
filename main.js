@@ -667,10 +667,26 @@ app.listen(PORT, () => {
   if (telegramValid) {
     log('info', 'Setting up news checker cron job (every 30 minutes)');
     
-    // Run immediately on startup (optional - you can remove this if you don't want it)
-    // newsChecker.checkAndSendNewNews().catch(err => {
-    //   log('error', 'Initial news check failed', { error: err.message });
-    // });
+    // Run immediately on startup - wait a bit for MongoDB to be fully ready
+    setTimeout(async () => {
+      log('info', 'Running initial news check on server startup...');
+      try {
+        const result = await newsChecker.checkAndSendNewNews();
+        if (result.success) {
+          log('info', 'Initial news check completed', {
+            newNewsCount: result.newNewsCount,
+            totalChecked: result.totalChecked
+          });
+        } else {
+          log('error', 'Initial news check failed', { error: result.error });
+        }
+      } catch (error) {
+        log('error', 'Error in initial news check', {
+          error: error.message,
+          stack: error.stack
+        });
+      }
+    }, 2000); // Wait 2 seconds for MongoDB connection to stabilize
     
     // Schedule cron job to run every 30 minutes
     cron.schedule('*/30 * * * *', async () => {
