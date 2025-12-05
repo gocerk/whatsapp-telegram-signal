@@ -180,18 +180,6 @@ class ChartService {
       // Close the page (but keep browser alive for reuse)
       await page.close();
 
-      // Save screenshot to root directory
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `chart_${formattedSymbol.replace(':', '_')}_${timestamp}.png`;
-      const filepath = path.join(process.cwd(), filename);
-      
-      try {
-        fs.writeFileSync(filepath, screenshotBuffer);
-        log('info', `Chart image saved to: ${filename}`);
-      } catch (saveError) {
-        log('warn', 'Failed to save chart image to file', { error: saveError.message });
-      }
-
       log('info', `Chart image captured successfully for ${symbol}`, {
         size: screenshotBuffer.length,
         contentType: 'image/png',
@@ -201,8 +189,6 @@ class ChartService {
       return {
         buffer: screenshotBuffer,
         contentType: 'image/png',
-        filename: filename,
-        filepath: filepath
       };
 
     } catch (error) {
