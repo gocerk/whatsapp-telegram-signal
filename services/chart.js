@@ -16,12 +16,79 @@ class ChartService {
   constructor() {
     this.tradingViewSessionId = process.env.TRADINGVIEW_SESSION_ID;
     this.tradingViewSessionIdSign = process.env.TRADINGVIEW_SESSION_ID_SIGN;
+    this.browser = null;
+    this.browserLaunchPromise = null;
+    this.isShuttingDown = false;
+  }
+
+  // Get or create browser instance (reused across requests)
+  async getBrowser() {
+    // If browser is already launched and connected, return it
+    if (this.browser && this.browser.isConnected()) {
+      return this.browser;
+    }
+
+    // If browser is launching, wait for it
+    if (this.browserLaunchPromise) {
+      return this.browserLaunchPromise;
+    }
+
+    // Launch new browser
+    this.browserLaunchPromise = this.launchBrowser();
+    
+    try {
+      this.browser = await this.browserLaunchPromise;
+      this.browserLaunchPromise = null;
+      return this.browser;
+    } catch (error) {
+      this.browserLaunchPromise = null;
+      throw error;
+    }
+  }
+
+  // Launch browser with optimized settings
+  async launchBrowser() {
+    log('info', 'Launching new browser instance (reused for all chart requests)');
+    
+    const browser = await puppeteer.launch({
+      headless: true,
+      defaultViewport: { 
+        width: 1440, 
+        height: 600 
+      },
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage', // Overcome limited resource problems
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu', // Disable GPU hardware acceleration
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process' // Run in single process mode (reduces memory usage)
+      ]
+    });
+
+    // Handle browser disconnection
+    browser.on('disconnected', () => {
+      log('warn', 'Browser disconnected, will relaunch on next request');
+      this.browser = null;
+      this.browserLaunchPromise = null;
+    });
+
+    return browser;
   }
 
   async getChartImage(symbol, options = {}) {
+    let page = null;
+    
     try {
       if (!this.tradingViewSessionId || !this.tradingViewSessionIdSign) {
         log('warn', 'TradingView session credentials not configured, skipping chart image');
+        return null;
+      }
+
+      if (this.isShuttingDown) {
+        log('warn', 'Service is shutting down, skipping chart request');
         return null;
       }
 
@@ -33,17 +100,11 @@ class ChartService {
       // Build TradingView chart URL
       const chartUrl = `https://tr.tradingview.com/chart/4atOlnQu?symbol=${encodeURIComponent(formattedSymbol)}`;
       
-      // Launch browser
-      const browser = await puppeteer.launch({
-        headless: true,
-        defaultViewport: { 
-          width: 1440, 
-          height: 600 
-        },
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+      // Get or create browser instance (reused across requests)
+      const browser = await this.getBrowser();
       
-      const page = await browser.newPage();
+      // Create a new page for this request
+      page = await browser.newPage();
 
       // Set cookies for TradingView authentication
       const cookies = [
@@ -116,7 +177,8 @@ class ChartService {
         });
       }
 
-      await browser.close();
+      // Close the page (but keep browser alive for reuse)
+      await page.close();
 
       // Save screenshot to root directory
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -148,7 +210,40 @@ class ChartService {
         symbol,
         error: error.message
       });
+      
+      // If browser connection is lost, reset it so it can be relaunched
+      if (this.browser && !this.browser.isConnected()) {
+        log('warn', 'Browser connection lost, will relaunch on next request');
+        this.browser = null;
+        this.browserLaunchPromise = null;
+      }
+      
       return null;
+    } finally {
+      // Always close the page if it was created
+      if (page && !page.isClosed()) {
+        try {
+          await page.close();
+        } catch (closeError) {
+          log('warn', 'Error closing page', { error: closeError.message });
+        }
+      }
+    }
+  }
+
+  // Cleanup method to close browser (call on app shutdown)
+  async closeBrowser() {
+    this.isShuttingDown = true;
+    
+    if (this.browser) {
+      try {
+        log('info', 'Closing browser instance');
+        await this.browser.close();
+        this.browser = null;
+        this.browserLaunchPromise = null;
+      } catch (error) {
+        log('error', 'Error closing browser', { error: error.message });
+      }
     }
   }
 

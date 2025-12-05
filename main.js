@@ -701,12 +701,28 @@ app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  log('info', 'SIGTERM received, shutting down gracefully');
+async function gracefulShutdown(signal) {
+  log('info', `${signal} received, shutting down gracefully`);
+  
+  // Close browser instance to free resources
+  try {
+    await chartService.closeBrowser();
+  } catch (error) {
+    log('error', 'Error during browser cleanup', { error: error.message });
+  }
+  
+  // Close MongoDB connection
+  if (mongoose.connection.readyState === 1) {
+    try {
+      await mongoose.connection.close();
+      log('info', 'MongoDB connection closed');
+    } catch (error) {
+      log('error', 'Error closing MongoDB connection', { error: error.message });
+    }
+  }
+  
   process.exit(0);
-});
+}
 
-process.on('SIGINT', () => {
-  log('info', 'SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
