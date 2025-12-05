@@ -183,7 +183,6 @@ class ChartService {
       log('info', `Chart image captured successfully for ${symbol}`, {
         size: screenshotBuffer.length,
         contentType: 'image/png',
-        savedAs: filename
       });
       
       return {
