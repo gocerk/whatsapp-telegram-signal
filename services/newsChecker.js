@@ -72,10 +72,6 @@ async function getAllSentNewsIds() {
  * Format news item for Telegram
  */
 function formatNewsForTelegram(newsItem) {
-  const tags = newsItem.tag && newsItem.tag.length > 0 
-    ? newsItem.tag.join(', ') 
-    : 'GENEL';
-  
   const publishDate = newsItem.publishDate 
     ? new Date(newsItem.publishDate).toLocaleString('tr-TR')
     : 'Tarih bilgisi yok';
@@ -86,12 +82,7 @@ function formatNewsForTelegram(newsItem) {
     message += `${newsItem.summary}\n\n`;
   }
   
-  message += `🏷️ *Etiketler:* ${tags}\n`;
   message += `📅 *Tarih:* ${publishDate}\n`;
-  
-  if (newsItem.content && newsItem.content.startsWith('http')) {
-    message += `\n🔗 [Detaylı haber için tıklayın](${newsItem.content})`;
-  }
   
   return message;
 }
