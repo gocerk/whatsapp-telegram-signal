@@ -4,9 +4,8 @@ require('dotenv').config('../.env');
 (async (currency) => {
     // 1. Tarayıcıyı Başlat
     const browser = await puppeteer.launch({
-        headless: true, // Arka planda çalışması için true, görmek için false yapabilirsiniz
-        defaultViewport: { width: 1440, height: 900 }, // Çıktı çözünürlüğü
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        headless: false, // Arka planda çalışması için true, görmek için false yapabilirsiniz
+        defaultViewport: { width: 1340, height: 900 }, // Çıktı çözünürlüğü
     });
     
     const page = await browser.newPage();
@@ -44,13 +43,29 @@ require('dotenv').config('../.env');
 
     // 5. Grafiğin Tam Yüklenmesini Bekle
     // Grafik mumlarının bulunduğu ana canvas elementinin yüklenmesini bekleriz.
-    try {
-        await page.waitForSelector('.chart-gui-wrapper', { timeout: 20000 });
+    try {        
+
+        // // --- YENİ EKLENEN KISIM: GRAFİĞİ SÜRÜKLEME ---
+        // console.log('info', 'Adjusting chart position (dragging to left)...');
         
-        // Ekstra bekleme: İndikatörlerin ve verilerin tam çizilmesi için 2-3 saniye beklemek iyidir.
-        await new Promise(r => setTimeout(r, 3000));
+        // // Ekranın ortasını hesapla
+        // const viewport = page.viewport();
+        // const startX = viewport.width / 2;
+        // const startY = viewport.height / 2;
+
+        // // Fareyi ortaya getir ve tıkla
+        // await page.mouse.move(startX, startY);
+        // await page.mouse.down();
+
+        // // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
+        // // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
+        // await page.mouse.move(startX - 100, startY, { steps: 100 }); 
+        
+        // // Fareyi bırak
+        // await page.mouse.up();
         
     } catch (e) {
+        console.log(e);
         console.log('Zaman aşımı veya seçici bulunamadı.');
     }
 
@@ -74,7 +89,7 @@ require('dotenv').config('../.env');
 
     console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
 
-    await browser.close();
+    // await browser.close();
 })("BINANCE:BTCUSDT");
 
 // module.exports = { getChartImage };

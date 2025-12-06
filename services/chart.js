@@ -131,35 +131,7 @@ class ChartService {
       // Navigate to chart
       await page.goto(chartUrl, { waitUntil: 'networkidle2' });
 
-      // Wait for chart to load
-      try {
-        await page.waitForSelector('.chart-gui-wrapper', { timeout: 20000 });
-        // Extra wait for indicators and data to fully render
-        await new Promise(r => setTimeout(r, 3000));
-
-        // --- YENİ EKLENEN KISIM: GRAFİĞİ SÜRÜKLEME ---
-        log('info', 'Adjusting chart position (dragging to left)...');
-        
-        // Ekranın ortasını hesapla
-        const viewport = page.viewport();
-        const startX = viewport.width / 2;
-        const startY = viewport.height / 2;
-
-        // Fareyi ortaya getir ve tıkla
-        await page.mouse.move(startX, startY);
-        await page.mouse.down();
-
-        // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
-        // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
-        await page.mouse.move(startX - 2000, startY, { steps: 10 }); 
-        
-        // Fareyi bırak
-        await page.mouse.up();
-        
-        await new Promise(r => setTimeout(r, 500));
-      } catch (e) {
-        log('warn', 'Timeout waiting for chart to load, proceeding anyway');
-      }
+      await new Promise(r => setTimeout(r, 2000));
 
       // Take screenshot of chart area
       const element = await page.$('.layout__area--center');
