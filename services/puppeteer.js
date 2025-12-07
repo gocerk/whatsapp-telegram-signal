@@ -48,24 +48,25 @@ require('dotenv').config('../.env');
     // Grafik mumlarının bulunduğu ana canvas elementinin yüklenmesini bekleriz.
     try {        
 
+        await new Promise(r => setTimeout(r, 2000));
         // // --- YENİ EKLENEN KISIM: GRAFİĞİ SÜRÜKLEME ---
         // console.log('info', 'Adjusting chart position (dragging to left)...');
         
-        // // Ekranın ortasını hesapla
-        // const viewport = page.viewport();
-        // const startX = viewport.width / 2;
-        // const startY = viewport.height / 2;
+        // Ekranın ortasını hesapla
+        const viewport = page.viewport();
+        const startX = viewport.width / 2;
+        const startY = viewport.height / 2;
 
-        // // Fareyi ortaya getir ve tıkla
-        // await page.mouse.move(startX, startY);
-        // await page.mouse.down();
+        // Fareyi ortaya getir ve tıkla
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
 
-        // // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
-        // // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
-        // await page.mouse.move(startX - 100, startY, { steps: 100 }); 
+        // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
+        // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
+        await page.mouse.move(startX - 2000, startY, { steps: 100 }); 
         
-        // // Fareyi bırak
-        // await page.mouse.up();
+        // Fareyi bırak
+        await page.mouse.up();
         
     } catch (e) {
         console.log(e);
