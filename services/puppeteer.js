@@ -63,7 +63,7 @@ require('dotenv').config('../.env');
 
         // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
         // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
-        await page.mouse.move(startX - 700, startY, { steps: 100 }); 
+        await page.mouse.move(startX - 200, startY, { steps: 100 }); 
         
         // Fareyi bırak
         await page.mouse.up();
@@ -83,7 +83,7 @@ require('dotenv').config('../.env');
     */
 
     // 7. Ekran Görüntüsünü Al ve Kaydet
-    const selector = 'body > div.js-rootresizer__contents > div > div.layout__area--center.unselectable';
+    const selector = 'body > div.js-rootresizer__contents > div';
     const element = await page.$(selector);
     if(element) {
         await element.screenshot({ path: 'tradingview_grafik.png' });
