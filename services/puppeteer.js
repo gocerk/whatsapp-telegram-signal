@@ -5,7 +5,10 @@ require('dotenv').config('../.env');
     // 1. Tarayıcıyı Başlat
     const browser = await puppeteer.launch({
         headless: false, // Arka planda çalışması için true, görmek için false yapabilirsiniz
-        defaultViewport: { width: 1340, height: 900 }, // Çıktı çözünürlüğü
+        defaultViewport: { width: 1340, height: 900 }, // Çıktı çözünürlüüğ
+        args: [
+            '--no-sandbox',
+        ]
     });
     
     const page = await browser.newPage();
