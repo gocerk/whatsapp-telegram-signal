@@ -54,7 +54,7 @@ require('dotenv').config('../.env');
         
         // Ekranın ortasını hesapla
         const viewport = page.viewport();
-        const startX = viewport.width / 2;
+        const startX = viewport.width / 3;
         const startY = viewport.height / 2;
 
         // Fareyi ortaya getir ve tıkla
@@ -63,7 +63,7 @@ require('dotenv').config('../.env');
 
         // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
         // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
-        await page.mouse.move(startX - 1200, startY, { steps: 100 }); 
+        await page.mouse.move(startX - 1000, startY, { steps: 100 }); 
         
         // Fareyi bırak
         await page.mouse.up();
