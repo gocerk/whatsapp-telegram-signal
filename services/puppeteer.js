@@ -83,13 +83,13 @@ require('dotenv').config('../.env');
     */
 
     // 7. Ekran Görüntüsünü Al ve Kaydet
-    const element = await page.$('.layout__area--center'); // Orta alan (genellikle grafik)
-    if(element) {
-        await element.screenshot({ path: 'tradingview_grafik.png' });
-    } else {
-        console.log('Grafik alanı bulunamadı, tam sayfa ekran görüntüsü alınıyor.');
+    // const element = await page.$('.layout__area--center'); // Orta alan (genellikle grafik)
+    // if(element) {
+        // await element.screenshot({ path: 'tradingview_grafik.png' });
+    // } else {
+        // console.log('Grafik alanı bulunamadı, tam sayfa ekran görüntüsü alınıyor.');
         await page.screenshot({ path: 'tradingview_grafik.png', fullPage: false });
-    }
+    // }
 
     console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
 
