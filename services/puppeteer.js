@@ -4,7 +4,7 @@ require('dotenv').config('../.env');
 (async (currency) => {
     // 1. Tarayıcıyı Başlat
     const browser = await puppeteer.launch({
-        headless: false, // Arka planda çalışması için true, görmek için false yapabilirsiniz
+        headless: true, // Arka planda çalışması için true, görmek için false yapabilirsiniz
         defaultViewport: { width: 1340, height: 900 }, // Çıktı çözünürlüüğ
         args: [
             '--no-sandbox',
