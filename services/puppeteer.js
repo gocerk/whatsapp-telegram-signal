@@ -50,7 +50,7 @@ require('dotenv').config('../.env');
 
         await new Promise(r => setTimeout(r, 2000));
         // // --- YENİ EKLENEN KISIM: GRAFİĞİ SÜRÜKLEME ---
-        // console.log('info', 'Adjusting chart position (dragging to left)...');
+        console.log('Grafik sola sürükleniyor...');
         
         // Ekranın ortasını hesapla
         const viewport = page.viewport();
@@ -63,7 +63,7 @@ require('dotenv').config('../.env');
 
         // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
         // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
-        await page.mouse.move(startX - 2000, startY, { steps: 100 }); 
+        await page.mouse.move(startX - 700, startY, { steps: 100 }); 
         
         // Fareyi bırak
         await page.mouse.up();
