@@ -48,7 +48,7 @@ require('dotenv').config('../.env');
     // Grafik mumlarının bulunduğu ana canvas elementinin yüklenmesini bekleriz.
     try {        
 
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1000));
         // // --- YENİ EKLENEN KISIM: GRAFİĞİ SÜRÜKLEME ---
         console.log('Grafik sola sürükleniyor...');
         

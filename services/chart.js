@@ -131,10 +131,29 @@ class ChartService {
       // Navigate to chart
       await page.goto(chartUrl, { waitUntil: 'networkidle2' });
 
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1200));
+      
+      console.log('Grafik sola sürükleniyor...');
+      
+      // Ekranın ortasını hesapla
+      const viewport = page.viewport();
+      const startX = viewport.width / 3;
+      const startY = viewport.height / 2;
+
+      // Fareyi ortaya getir ve tıkla
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+
+      // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
+      // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
+      await page.mouse.move(startX - 200, startY, { steps: 100 }); 
+      
+      // Fareyi bırak
+      await page.mouse.up();
 
       // Take screenshot of chart area
-      const element = await page.$('.layout__area--center');
+      const selector = 'body > div.js-rootresizer__contents > div';
+      const element = await page.$(selector);
       let screenshotBuffer;
       
       if (element) {
