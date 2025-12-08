@@ -105,14 +105,14 @@ async function handleTextMessage(req, res) {
           height: 600
         };
 
-        const { buffer: chartBuffer } = await chartService.getChartImage(formattedSymbol, chartOptions);
-        if (chartBuffer) {
-          chartImage = chartBuffer; // For WhatsApp and Telegram (original buffer)
+        const chartResult = await chartService.getChartImage(formattedSymbol, chartOptions);
+        if (chartResult && chartResult.buffer) {
+          chartImage = chartResult; // For WhatsApp and Telegram (original buffer)
 
           log('info', 'Chart image captured successfully', {
             sessionAuth: chartService.hasSessionAuth(),
-            size: chartBuffer.buffer.length,
-            contentType: chartBuffer.contentType,
+            size: chartResult.buffer.length,
+            contentType: chartResult.contentType,
           });
         }
       } catch (chartError) {
@@ -366,14 +366,14 @@ app.post('/webhook', async (req, res) => {
         height: 600
       };
 
-      const { buffer: chartBuffer } = await chartService.getChartImage(formattedSymbol, chartOptions);
-      if (chartBuffer) {
-        chartImage = chartBuffer; // For WhatsApp (original buffer)
+      const chartResult = await chartService.getChartImage(formattedSymbol, chartOptions);
+      if (chartResult && chartResult.buffer) {
+        chartImage = chartResult; // For WhatsApp (original buffer)
 
         log('info', 'Chart image captured successfully', {
           sessionAuth: chartService.hasSessionAuth(),
-          size: chartBuffer.buffer.length,
-          contentType: chartBuffer.contentType,
+          size: chartResult.buffer.length,
+          contentType: chartResult.contentType,
         });
       }
     } catch (chartError) {
@@ -575,6 +575,16 @@ app.listen(PORT, () => {
   };
   
   log('info', 'Service configuration status', servicesStatus);
+  
+  // Pre-launch browser for chart service if configured
+  if (chartValid) {
+    log('info', 'Pre-launching browser for chart service...');
+    chartService.getBrowser().then(() => {
+      log('info', 'Browser pre-launched successfully and ready for chart requests');
+    }).catch((error) => {
+      log('error', 'Failed to pre-launch browser', { error: error.message });
+    });
+  }
   
   if (whatsappValid && telegramValid && chartValid) {
     log('info', 'All services configured and ready');

@@ -19,6 +19,10 @@ class ChartService {
     this.browser = null;
     this.browserLaunchPromise = null;
     this.isShuttingDown = false;
+    this.requestQueue = [];
+    this.processingCount = 0;
+    this.maxConcurrentRequests = 3; // Maximum concurrent chart requests
+    this.navigationTimeout = 60000; // 60 seconds timeout
   }
 
   // Get or create browser instance (reused across requests)
@@ -63,8 +67,8 @@ class ChartService {
         '--disable-accelerated-2d-canvas',
         '--disable-gpu', // Disable GPU hardware acceleration
         '--no-first-run',
-        '--no-zygote',
-        '--single-process' // Run in single process mode (reduces memory usage)
+        '--no-zygote'
+        // Removed --single-process to allow better parallel processing
       ]
     });
 
@@ -75,10 +79,18 @@ class ChartService {
       this.browserLaunchPromise = null;
     });
 
+    log('info', 'Browser launched successfully and ready for requests');
     return browser;
   }
 
   async getChartImage(symbol, options = {}) {
+    // Wait if we're at max concurrent requests
+    while (this.processingCount >= this.maxConcurrentRequests) {
+      log('info', `Waiting for available slot. Current processing: ${this.processingCount}/${this.maxConcurrentRequests}`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    this.processingCount++;
     let page = null;
     
     try {
@@ -92,7 +104,7 @@ class ChartService {
         return null;
       }
 
-      log('info', `Fetching chart image for ${symbol} using Puppeteer`);
+      log('info', `Fetching chart image for ${symbol} using Puppeteer (${this.processingCount}/${this.maxConcurrentRequests} active)`);
 
       // Format symbol for TradingView URL
       const formattedSymbol = this.formatSymbol(symbol);
@@ -105,6 +117,10 @@ class ChartService {
       
       // Create a new page for this request
       page = await browser.newPage();
+      
+      // Set longer timeout for navigation
+      page.setDefaultNavigationTimeout(this.navigationTimeout);
+      page.setDefaultTimeout(this.navigationTimeout);
 
       // Set cookies for TradingView authentication
       const cookies = [
@@ -128,12 +144,17 @@ class ChartService {
 
       await page.setCookie(...cookies);
 
-      // Navigate to chart
-      await page.goto(chartUrl);
+      // Navigate to chart with longer timeout and wait for network idle
+      log('info', `Navigating to chart for ${symbol}`);
+      await page.goto(chartUrl, {
+        waitUntil: 'networkidle2',
+        timeout: this.navigationTimeout
+      });
 
+      // Wait for chart to load
       await new Promise(r => setTimeout(r, 4000));
       
-      console.log('Grafik sola sürükleniyor...');
+      log('info', `Chart loaded, dragging for ${symbol}`);
       
       // Ekranın ortasını hesapla
       const viewport = page.viewport();
@@ -144,12 +165,14 @@ class ChartService {
       await page.mouse.move(startX, startY);
       await page.mouse.down();
 
-      // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
-      // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
+      // Fareyi sola doğru sürükle
       await page.mouse.move(startX - 200, startY, { steps: 100 }); 
       
       // Fareyi bırak
       await page.mouse.up();
+
+      // Small delay after drag
+      await new Promise(r => setTimeout(r, 1000));
 
       // Take screenshot of chart area
       const selector = 'body > div.js-rootresizer__contents > div';
@@ -167,9 +190,6 @@ class ChartService {
           fullPage: false
         });
       }
-
-      // Close the page (but keep browser alive for reuse)
-      await page.close();
 
       log('info', `Chart image captured successfully for ${symbol}`, {
         size: screenshotBuffer.length,
@@ -200,10 +220,12 @@ class ChartService {
       if (page && !page.isClosed()) {
         try {
           await page.close();
+          log('info', `Page closed for ${symbol}`);
         } catch (closeError) {
           log('warn', 'Error closing page', { error: closeError.message });
         }
       }
+      this.processingCount--;
     }
   }
 
