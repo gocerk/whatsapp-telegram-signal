@@ -16,6 +16,15 @@ const PORT = process.env.PORT || 80;
 const CHARTS_DIR = path.join(__dirname, 'uploads', 'charts');
 const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
 
+// Logging utility
+const log = (level, message, data = null) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${level.toUpperCase()}: ${message}`);
+  if (data) {
+    console.log(JSON.stringify(data, null, 2));
+  }
+};
+
 // Ensure charts directory exists
 if (!fs.existsSync(CHARTS_DIR)) {
   fs.mkdirSync(CHARTS_DIR, { recursive: true });
@@ -45,14 +54,6 @@ app.use((req, res, next) => {
 const WHATSAPP_GROUP_ID = process.env.WHATSAPP_TO_NUMBERS;
 const WHATSAPP_GROUPS = process.env.WHATSAPP_GROUPS; // Comma-separated list of group IDs
 
-// Logging utility
-const log = (level, message, data = null) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${level.toUpperCase()}: ${message}`);
-  if (data) {
-    console.log(JSON.stringify(data, null, 2));
-  }
-};
 
 // Initialize MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
