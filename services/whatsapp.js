@@ -146,6 +146,34 @@ class WhatsAppService {
   }
 
   /**
+   * Format number to reduce decimal places
+   * @param {string|number} value - Value to format
+   * @param {number} maxDecimals - Maximum number of decimal places (default: 4)
+   * @returns {string} Formatted value
+   */
+  formatNumber(value, maxDecimals = 4) {
+    if (value === null || value === undefined || value === '') {
+      return value;
+    }
+    
+    // Convert to string first
+    const strValue = String(value).trim();
+    
+    // Check if it's a number (including decimals)
+    const numMatch = strValue.match(/^-?\d+\.?\d*$/);
+    if (numMatch) {
+      const num = parseFloat(strValue);
+      if (!isNaN(num)) {
+        // Format to max 4 decimal places, remove trailing zeros
+        return num.toFixed(maxDecimals).replace(/\.?0+$/, '');
+      }
+    }
+    
+    // If not a number, return as is
+    return strValue;
+  }
+
+  /**
    * Format trading message for display
    * @param {Object} signal - Trading signal data
    * @returns {string} Formatted message text
@@ -153,8 +181,11 @@ class WhatsAppService {
   formatTradingMessage(signal) {
     const { title, datetime, action, symbol, price, ...otherProps } = signal;
     
+    // Format price
+    const formattedPrice = this.formatNumber(price);
+    
     // Build main message with title, datetime, action, symbol, price
-    let message = `${title}\n${datetime || new Date().toISOString()}\n\n${action} ${symbol} ${price}`;
+    let message = `${title}\n${datetime || new Date().toISOString()}\n\n${action} ${symbol} ${formattedPrice}`;
     
     // Add all other properties as KEY: VALUE (preserve original order)
     const excludedKeys = ['title', 'datetime', 'action', 'symbol', 'price'];
@@ -165,9 +196,11 @@ class WhatsAppService {
       message += '\n';
       additionalProps.forEach(key => {
         const value = otherProps[key];
+        // Format value if it's a number
+        const formattedValue = this.formatNumber(value);
         // Format key: uppercase and remove special characters, keep numbers
         const formattedKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        message += `\n${formattedKey}: ${value}`;
+        message += `\n${formattedKey}: ${formattedValue}`;
       });
     }
     

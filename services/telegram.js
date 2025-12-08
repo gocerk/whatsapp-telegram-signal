@@ -34,6 +34,34 @@ class TelegramService {
   }
 
   /**
+   * Format number to reduce decimal places
+   * @param {string|number} value - Value to format
+   * @param {number} maxDecimals - Maximum number of decimal places (default: 4)
+   * @returns {string} Formatted value
+   */
+  formatNumber(value, maxDecimals = 4) {
+    if (value === null || value === undefined || value === '') {
+      return value;
+    }
+    
+    // Convert to string first
+    const strValue = String(value).trim();
+    
+    // Check if it's a number (including decimals)
+    const numMatch = strValue.match(/^-?\d+\.?\d*$/);
+    if (numMatch) {
+      const num = parseFloat(strValue);
+      if (!isNaN(num)) {
+        // Format to max 4 decimal places, remove trailing zeros
+        return num.toFixed(maxDecimals).replace(/\.?0+$/, '');
+      }
+    }
+    
+    // If not a number, return as is
+    return strValue;
+  }
+
+  /**
    * Format TradingView webhook data into a readable message
    * Same format as WhatsApp: title, datetime, action symbol price, then KEY: VALUE for other properties
    */
@@ -44,7 +72,7 @@ class TelegramService {
     const messageDatetime = datetime || new Date().toISOString();
     const messageAction = (action || data.side || "").toUpperCase();
     const messageSymbol = symbol || data.ticker || "";
-    const messagePrice = price || data.close || "";
+    const messagePrice = this.formatNumber(price || data.close || "");
 
     // Build main message with title, datetime, action, symbol, price
     let message = `${messageTitle}\n${messageDatetime}\n\n${messageAction} ${messageSymbol} ${messagePrice}`;
@@ -58,9 +86,11 @@ class TelegramService {
       message += '\n';
       additionalProps.forEach(key => {
         const value = otherProps[key];
+        // Format value if it's a number
+        const formattedValue = this.formatNumber(value);
         // Format key: uppercase and remove special characters, keep numbers
         const formattedKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        message += `\n${formattedKey}: ${value}`;
+        message += `\n${formattedKey}: ${formattedValue}`;
       });
     }
     
