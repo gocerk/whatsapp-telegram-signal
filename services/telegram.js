@@ -35,28 +35,34 @@ class TelegramService {
 
   /**
    * Format TradingView webhook data into a readable message
+   * Same format as WhatsApp: title, datetime, action symbol price, then KEY: VALUE for other properties
    */
   formatTradingViewMessage(data) {
-    const title = data.title || "Yeni Islem Onerisi";
-    const datetime = data.datetime || "";
-    const action = (data.action || data.side || "").toUpperCase();
-    const symbol = data.symbol || data.ticker || "";
-    const price = data.price || data.close || "";
+    const { title, datetime, action, symbol, price, ...otherProps } = data;
+    
+    const messageTitle = title || "Yeni Islem Onerisi";
+    const messageDatetime = datetime || new Date().toISOString();
+    const messageAction = (action || data.side || "").toUpperCase();
+    const messageSymbol = symbol || data.ticker || "";
+    const messagePrice = price || data.close || "";
 
-    // Compose message as requested
-    // Example:
-    // Yeni Islem Onerisi
-    //
-    // 18.09.2024 21:30
-    //
-    // SELL EURUSD 1.11646
-    let message = `${title}\n\n`;
+    // Build main message with title, datetime, action, symbol, price
+    let message = `${messageTitle}\n${messageDatetime}\n\n${messageAction} ${messageSymbol} ${messagePrice}`;
     
-    if (datetime) {
-      message += `${datetime}\n\n`;
+    // Add all other properties as KEY: VALUE (preserve original order)
+    const excludedKeys = ['title', 'datetime', 'action', 'side', 'symbol', 'ticker', 'price', 'close'];
+    const additionalProps = Object.keys(otherProps)
+      .filter(key => !excludedKeys.includes(key.toLowerCase()) && otherProps[key] !== undefined && otherProps[key] !== null && otherProps[key] !== '');
+    
+    if (additionalProps.length > 0) {
+      message += '\n';
+      additionalProps.forEach(key => {
+        const value = otherProps[key];
+        // Format key: uppercase and remove special characters, keep numbers
+        const formattedKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        message += `\n${formattedKey}: ${value}`;
+      });
     }
-    
-    message += `${action} ${symbol} ${price}`.trim();
     
     return message;
   }

@@ -199,11 +199,7 @@ async function handleTextMessage(req, res) {
 
     // Send to Telegram (with chart if available)
     try {
-      if (chartImage) {
-        await telegramService.sendPhoto(chartImage, messageText, 'HTML');
-      } else {
-        await telegramService.sendMessage(messageText);
-      }
+      await telegramService.sendFormattedMessage(signalData, chartImage);
       results.telegram = { success: true };
       log('info', 'Text message sent to Telegram successfully', {
         chartIncluded: !!chartImage
