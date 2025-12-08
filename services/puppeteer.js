@@ -95,6 +95,6 @@ require('dotenv').config('../.env');
     console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
 
     // await browser.close();
-})("BINANCE:ETHUSDT");
+})("FX:CADJPY");
 
 // module.exports = { getChartImage };
