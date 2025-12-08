@@ -146,10 +146,7 @@ class ChartService {
 
       // Navigate to chart with longer timeout and wait for network idle
       log('info', `Navigating to chart for ${symbol}`);
-      await page.goto(chartUrl, {
-        waitUntil: 'networkidle2',
-        timeout: this.navigationTimeout
-      });
+      await page.goto(chartUrl);
 
       // Wait for chart to load
       await new Promise(r => setTimeout(r, 4000));
