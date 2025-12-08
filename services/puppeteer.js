@@ -4,11 +4,11 @@ require('dotenv').config('../.env');
 (async (currency) => {
     // 1. Tarayıcıyı Başlat
     const browser = await puppeteer.launch({
-        headless: true, // Arka planda çalışması için true, görmek için false yapabilirsiniz
+        headless: false, // Arka planda çalışması için true, görmek için false yapabilirsiniz
         defaultViewport: { width: 1340, height: 900 }, // Çıktı çözünürlüüğ
-        args: [
-            '--no-sandbox',
-        ]
+        // args: [
+        //     '--no-sandbox',
+        // ]
     });
     
     const page = await browser.newPage();
@@ -42,13 +42,13 @@ require('dotenv').config('../.env');
     const chartUrl = 'https://tr.tradingview.com/chart/4atOlnQu?symbol=' + encodeURIComponent(currency); 
     
     console.log('Grafiğe gidiliyor...');
-    await page.goto(chartUrl, { waitUntil: 'networkidle2' });
+    await page.goto(chartUrl);
 
     // 5. Grafiğin Tam Yüklenmesini Bekle
     // Grafik mumlarının bulunduğu ana canvas elementinin yüklenmesini bekleriz.
     try {        
 
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 4000));
         // // --- YENİ EKLENEN KISIM: GRAFİĞİ SÜRÜKLEME ---
         console.log('Grafik sola sürükleniyor...');
         

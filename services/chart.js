@@ -129,9 +129,9 @@ class ChartService {
       await page.setCookie(...cookies);
 
       // Navigate to chart
-      await page.goto(chartUrl, { waitUntil: 'networkidle2' });
+      await page.goto(chartUrl);
 
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 4000));
       
       console.log('Grafik sola sürükleniyor...');
       
