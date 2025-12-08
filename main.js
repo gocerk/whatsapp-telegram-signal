@@ -12,6 +12,16 @@ const newsChecker = require('./services/newsChecker');
 const app = express();
 const PORT = process.env.PORT || 80;
 
+// Chart images directory
+const CHARTS_DIR = path.join(__dirname, 'uploads', 'charts');
+const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
+
+// Ensure charts directory exists
+if (!fs.existsSync(CHARTS_DIR)) {
+  fs.mkdirSync(CHARTS_DIR, { recursive: true });
+  log('info', 'Created charts directory', { path: CHARTS_DIR });
+}
+
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -122,27 +132,65 @@ async function handleTextMessage(req, res) {
       telegram: null
     };
 
-    // Send to WhatsApp (with chart if available)
+    // Send to WhatsApp (with chart image if available)
     try {
+      // Prepare signal data format for WhatsApp sendFormattedMessageToPerson
+      const signalData = {
+        title: messageData.msg,
+        datetime: messageData.timestamp,
+        action: '',
+        symbol: messageData.symbol,
+        price: '',
+        // Include all other properties from the request body
+        ...Object.keys(req.body).reduce((acc, key) => {
+          const lowerKey = key.toLowerCase();
+          // Exclude already processed keys
+          if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids'].includes(lowerKey)) {
+            acc[key] = req.body[key];
+          }
+          return acc;
+        }, {})
+      };
+      
+      // Save chart image and get URL if available
+      let chartImageUrl = null;
       if (chartImage) {
-        // Prepare signal data format for WhatsApp sendFormattedMessageToGroup
-        const signalData = {
-          title: messageData.msg,
-          datetime: messageData.timestamp,
-          action: '',
-          symbol: messageData.symbol,
-          price: ''
-        };
-        await whatsappService.sendFormattedMessageToGroup(WHATSAPP_GROUP_ID, signalData, chartImage);
-      } else {
-        await whatsappService.sendMessage(WHATSAPP_GROUP_ID, messageText);
+        chartImageUrl = await saveChartImage(chartImage, messageData.symbol);
+        if (chartImageUrl) {
+          log('info', 'Chart image URL generated', { url: chartImageUrl });
+        }
       }
-      results.whatsapp = { success: true };
-      log('info', 'Text message sent to WhatsApp successfully', {
-        chartIncluded: !!chartImage
-      });
+      
+      // Send to configured phone number(s)
+      const targetNumbers = WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
+      
+      if (targetNumbers) {
+        const phoneNumbers = targetNumbers.split(',').map(num => num.trim());
+        let successCount = 0;
+        
+        for (const phoneNumber of phoneNumbers) {
+          try {
+            await whatsappService.sendFormattedMessageToPerson(phoneNumber, signalData, chartImageUrl);
+            successCount++;
+            log('info', 'Message sent to WhatsApp successfully', {
+              phoneNumber: phoneNumber,
+              hasImage: !!chartImageUrl
+            });
+          } catch (err) {
+            log('error', `Failed to send to ${phoneNumber}`, { error: err.message });
+          }
+        }
+        
+        if (successCount === 0) {
+          throw new Error('Failed to send to all phone numbers');
+        }
+        
+        results.whatsapp = { success: true, sentTo: successCount, total: phoneNumbers.length };
+      } else {
+        throw new Error('No WhatsApp phone number configured');
+      }
     } catch (whatsappError) {
-      log('error', 'Failed to send text to WhatsApp', {
+      log('error', 'Failed to send to WhatsApp', {
         error: whatsappError.message
       });
       results.whatsapp = { success: false, error: whatsappError.message };
@@ -204,6 +252,51 @@ async function handleTextMessage(req, res) {
   }
 }
 
+// Serve chart images
+app.get('/charts/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(CHARTS_DIR, filename);
+  
+  // Security: prevent directory traversal
+  if (!path.normalize(filePath).startsWith(path.normalize(CHARTS_DIR))) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).json({ error: 'Chart not found' });
+  }
+});
+
+// Helper function to save chart image and return URL
+async function saveChartImage(chartBuffer, symbol) {
+  try {
+    if (!chartBuffer || !chartBuffer.buffer) {
+      return null;
+    }
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const safeSymbol = symbol.replace(/[^a-zA-Z0-9]/g, '_');
+    const extension = chartBuffer.contentType === 'image/png' ? 'png' : 'jpg';
+    const filename = `${safeSymbol}_${timestamp}.${extension}`;
+    const filePath = path.join(CHARTS_DIR, filename);
+
+    // Write buffer to file
+    fs.writeFileSync(filePath, chartBuffer.buffer);
+    log('info', 'Chart image saved', { filename, path: filePath });
+
+    // Generate public URL
+    const imageUrl = `${SERVER_URL}/charts/${filename}`;
+    
+    return imageUrl;
+  } catch (error) {
+    log('error', 'Failed to save chart image', { error: error.message });
+    return null;
+  }
+}
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
@@ -246,13 +339,22 @@ app.post('/webhook', async (req, res) => {
       });
     }
 
-    // Prepare signal data
+    // Prepare signal data - include all properties from request body
     const signalData = {
       title,
       datetime: datetime || new Date().toISOString(),
       action: action.toUpperCase(),
       symbol,
-      price
+      price,
+      // Include all other properties from the request body
+      ...Object.keys(req.body).reduce((acc, key) => {
+        const lowerKey = key.toLowerCase();
+        // Exclude already processed keys and common webhook fields
+        if (!['title', 'datetime', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids'].includes(lowerKey)) {
+          acc[key] = req.body[key];
+        }
+        return acc;
+      }, {})
     };
 
     // Get chart image for the symbol
@@ -293,42 +395,73 @@ app.post('/webhook', async (req, res) => {
 
     // Send to WhatsApp
     try {
-      // Check if specific group(s) are requested in the webhook payload
-      const targetGroups = req.body.groupId || req.body.groupIds || WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
+      // Save chart image and get URL if available
+      let chartImageUrl = null;
+      if (chartImage) {
+        chartImageUrl = await saveChartImage(chartImage, symbol);
+        if (chartImageUrl) {
+          log('info', 'Chart image URL generated', { url: chartImageUrl });
+        }
+      }
+
+      // Check if specific phone number(s) are requested in the webhook payload
+      const targetNumbers = WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
       
-      if (Array.isArray(targetGroups) || (typeof targetGroups === 'string' && targetGroups.includes(','))) {
-        // Multiple groups specified
-        const groupIds = Array.isArray(targetGroups) 
-          ? targetGroups 
-          : targetGroups.split(',').map(g => g.trim());
+      if (Array.isArray(targetNumbers) || (typeof targetNumbers === 'string' && targetNumbers.includes(','))) {
+        // Multiple phone numbers specified
+        const phoneNumbers = Array.isArray(targetNumbers) 
+          ? targetNumbers 
+          : targetNumbers.split(',').map(num => num.trim());
         
-        log('info', 'Sending to multiple WhatsApp groups', { groupCount: groupIds.length });
-        const groupResults = await whatsappService.sendFormattedMessageToMultipleGroups(
-          groupIds, 
-          signalData, 
-          chartImage
-        );
-        results.whatsapp = {
-          success: groupResults.success,
-          total: groupResults.total,
-          succeeded: groupResults.succeeded,
-          failed: groupResults.failed,
-          groups: groupResults.groups
+        log('info', 'Sending to multiple WhatsApp numbers', { count: phoneNumbers.length });
+        
+        const sendResults = {
+          total: phoneNumbers.length,
+          succeeded: 0,
+          failed: 0,
+          numbers: []
         };
-        log('info', 'Signal sent to WhatsApp groups', {
-          total: groupResults.total,
-          succeeded: groupResults.succeeded,
-          failed: groupResults.failed
+
+        for (const phoneNumber of phoneNumbers) {
+          try {
+            await whatsappService.sendFormattedMessageToPerson(phoneNumber, signalData, chartImageUrl);
+            sendResults.succeeded++;
+            sendResults.numbers.push({
+              phoneNumber: phoneNumber,
+              success: true
+            });
+          } catch (err) {
+            sendResults.failed++;
+            sendResults.numbers.push({
+              phoneNumber: phoneNumber,
+              success: false,
+              error: err.message
+            });
+            log('error', `Failed to send to ${phoneNumber}`, { error: err.message });
+          }
+        }
+
+        results.whatsapp = {
+          success: sendResults.succeeded > 0,
+          total: sendResults.total,
+          succeeded: sendResults.succeeded,
+          failed: sendResults.failed,
+          numbers: sendResults.numbers
+        };
+        log('info', 'Signal sent to WhatsApp numbers', {
+          total: sendResults.total,
+          succeeded: sendResults.succeeded,
+          failed: sendResults.failed
         });
-      } else if (targetGroups) {
-        // Single group specified
-        const groupId = typeof targetGroups === 'string' ? targetGroups.trim() : targetGroups;
-        log('info', 'Sending to single WhatsApp group', { groupId });
-        await whatsappService.sendFormattedMessageToGroup(groupId, signalData, chartImage);
-        results.whatsapp = { success: true, groupId };
-        log('info', 'Signal sent to WhatsApp group successfully');
+      } else if (targetNumbers) {
+        // Single phone number specified
+        const phoneNumber = typeof targetNumbers === 'string' ? targetNumbers.trim() : targetNumbers;
+        log('info', 'Sending to single WhatsApp number', { phoneNumber });
+        await whatsappService.sendFormattedMessageToPerson(phoneNumber, signalData, chartImageUrl);
+        results.whatsapp = { success: true, phoneNumber };
+        log('info', 'Signal sent to WhatsApp number successfully');
       } else {
-        throw new Error('No WhatsApp group ID configured or provided');
+        throw new Error('No WhatsApp phone number configured or provided');
       }
     } catch (whatsappError) {
       log('error', 'Failed to send to WhatsApp', {
