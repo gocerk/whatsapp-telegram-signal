@@ -285,7 +285,7 @@ async function saveChartImage(chartBuffer, symbol) {
     log('info', 'Chart image saved', { filename, path: filePath });
 
     // Generate public URL
-    const imageUrl = `${SERVER_URL}/charts/${filename}`;
+    const imageUrl = `http://104.247.166.151/charts/${filename}`;
     
     return imageUrl;
   } catch (error) {
