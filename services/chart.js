@@ -361,7 +361,7 @@ class ChartService {
     }
 
     // Default to BINANCE for crypto-like symbols
-    return `BINANCE:${symbol.toUpperCase()}`;
+    return `${symbol.toUpperCase()}`;
   }
 
   // Validate configuration including session credentials
