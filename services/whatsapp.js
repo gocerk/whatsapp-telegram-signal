@@ -224,8 +224,29 @@ class WhatsAppService {
         throw new Error('phoneNumber and imageUrl are required');
       }
 
-      // Remove + and any spaces from phone number
-      const cleanPhoneNumber = phoneNumber.replace(/[\s+]/g, '');
+      // Whapi expects phone number: remove +, spaces, and any non-digit or hyphen at start/end
+      let cleanPhoneNumber = phoneNumber
+        .replace(/[^\d\-@.]/g, '') // remove ALL non-digit, non-hyphen, non-@, non-dot
+        .replace(/^[-\s]+|[-\s]+$/g, '') // trim - and spaces from start/end
+        .replace(/-/g, ''); // remove all dashes
+
+      // Some "copy-paste" numbers from WhatsApp Web contain invisible LTR/RTL marks or strange chars
+      cleanPhoneNumber = cleanPhoneNumber.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
+
+      // Defensive: must only have digits or, for group, may end in @g.us, but not contain garbage
+      // For direct numbers, must be 9-31 digits
+      const isGroup = cleanPhoneNumber.includes('@g.us');
+      if (!isGroup) {
+        // Remove @... if present
+        const digitsOnly = cleanPhoneNumber.replace(/@.*/, '');
+        // Must be only digits and length 9-31
+        if (!/^\d{9,31}$/.test(digitsOnly)) {
+          throw new Error(
+            `Invalid phone number format for WhatsApp API: "${digitsOnly}" from input "${phoneNumber}"`
+          );
+        }
+        cleanPhoneNumber = digitsOnly;
+      }
 
       const url = `${this.whapiBaseUrl}/messages/image`;
       const headers = {
@@ -241,7 +262,8 @@ class WhatsAppService {
       };
 
       log('info', 'Sending image to person via Whapi API', {
-        phoneNumber: cleanPhoneNumber,
+        phoneNumber: phoneNumber,
+        cleaned: cleanPhoneNumber,
         imageUrl: imageUrl
       });
 
@@ -268,11 +290,34 @@ class WhatsAppService {
         throw new Error(`Unexpected status code: ${response.status}`);
       }
     } catch (error) {
+      // Enhance error log if 400 from server with pattern error
+      let hint;
+      let details;
+      if (
+        error.response &&
+        error.response.status === 400 &&
+        error.response.data &&
+        error.response.data.error &&
+        typeof error.response.data.error.details === 'string'
+      ) {
+        details = error.response.data.error.details;
+        hint = '';
+        if (
+          /must match pattern/.test(details) &&
+          /to must match pattern/.test(details)
+        ) {
+          hint =
+            '\n⚠️ Looks like the WhatsApp number format is invalid. ' +
+            'Make sure phone number contains ONLY digits, no spaces or symbols. For example: 15551234567';
+        }
+      }
+
       log('error', 'Failed to send image via Whapi API', {
-        error: error.message,
+        error: error.message + (hint ? hint : ''),
         phoneNumber: phoneNumber,
         imageUrl: imageUrl,
-        response: error.response?.data
+        response: error.response?.data,
+        details
       });
       throw error;
     }
