@@ -150,6 +150,20 @@ class ChartService {
 
       // Wait for chart to load
       await new Promise(r => setTimeout(r, 4000));
+
+      // Check for popup and close it if it appears
+      try {
+        const closeButton = await page.$('.closeButtonWrapper-uFIlBZ4i');
+        if (closeButton) {
+          log('info', `Popup detected, closing it for ${symbol}`);
+          await closeButton.click();
+          // Wait a bit after closing popup
+          await new Promise(r => setTimeout(r, 500));
+        }
+      } catch (error) {
+        log('warn', `Error checking/closing popup for ${symbol}`, { error: error.message });
+        // Continue even if popup handling fails
+      }
       
       log('info', `Chart loaded, dragging for ${symbol}`);
       
