@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const newsService = require('./news');
 const TelegramService = require('./telegram');
+const WhatsAppService = require('./whatsapp');
 const SentNews = require('../models/sentNews');
 
 // Logging utility
@@ -88,6 +89,25 @@ function formatNewsForTelegram(newsItem) {
 }
 
 /**
+ * Format news item for WhatsApp
+ */
+function formatNewsForWhatsApp(newsItem) {
+  const publishDate = newsItem.publishDate 
+    ? new Date(newsItem.publishDate).toLocaleString('tr-TR')
+    : 'Tarih bilgisi yok';
+  
+  let message = `📰 ${newsItem.header || 'Haber'}\n\n`;
+  
+  if (newsItem.summary) {
+    message += `${newsItem.summary}\n\n`;
+  }
+  
+  message += `📅 Tarih: ${publishDate}`;
+  
+  return message;
+}
+
+/**
  * Check for new news and send to Telegram
  */
 async function checkAndSendNewNews() {
@@ -170,20 +190,24 @@ async function checkAndSendNewNews() {
         
         log('info', `Found ${newNews.length} new news items for tag: ${tag}`);
         
-        // Send each new news item to Telegram
+        // Send each new news item to Telegram and WhatsApp
         const telegramService = new TelegramService();
+        const whatsappService = new WhatsAppService();
         // Additional Telegram group ID from environment variable (optional)
         const additionalGroupId = process.env.TELEGRAM_ADDITIONAL_CHAT_ID || '-1003148217444';
+        // WhatsApp phone number for news (different from default)
+        const whatsappNewsPhoneNumber = process.env.WHATSAPP_NEWS_PHONE_NUMBER;
         
         for (const newsItem of newNews) {
           try {
             const newsId = newsItem._id || newsItem.id;
-            const formattedMessage = formatNewsForTelegram(newsItem);
+            const formattedTelegramMessage = formatNewsForTelegram(newsItem);
+            const formattedWhatsAppMessage = formatNewsForWhatsApp(newsItem);
             
-            // Send only to additional group (not to default chat)
+            // Send to Telegram
             if (additionalGroupId) {
               try {
-                await telegramService.sendMessage(formattedMessage, 'Markdown', additionalGroupId);
+                await telegramService.sendMessage(formattedTelegramMessage, 'Markdown', additionalGroupId);
                 log('info', `News sent to Telegram group`, {
                   newsId,
                   chatId: additionalGroupId
@@ -208,6 +232,27 @@ async function checkAndSendNewNews() {
               }
             } else {
               log('warn', 'TELEGRAM_ADDITIONAL_CHAT_ID not configured, skipping news send', {
+                newsId
+              });
+            }
+            
+            // Send to WhatsApp (different number)
+            if (whatsappNewsPhoneNumber) {
+              try {
+                await whatsappService.sendMessageToPerson(whatsappNewsPhoneNumber, formattedWhatsAppMessage);
+                log('info', `News sent to WhatsApp`, {
+                  newsId,
+                  phoneNumber: whatsappNewsPhoneNumber
+                });
+              } catch (error) {
+                log('error', `Failed to send news to WhatsApp`, {
+                  newsId,
+                  phoneNumber: whatsappNewsPhoneNumber,
+                  error: error.message
+                });
+              }
+            } else {
+              log('warn', 'WHATSAPP_NEWS_PHONE_NUMBER not configured, skipping WhatsApp send', {
                 newsId
               });
             }
