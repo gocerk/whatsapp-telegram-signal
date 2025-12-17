@@ -224,19 +224,21 @@ class WhatsAppService {
         throw new Error('phoneNumber and imageUrl are required');
       }
 
-      // Whapi expects phone number: remove +, spaces, and any non-digit or hyphen at start/end
-      let cleanPhoneNumber = phoneNumber
-        .replace(/[^\d\-@.]/g, '') // remove ALL non-digit, non-hyphen, non-@, non-dot
-        .replace(/^[-\s]+|[-\s]+$/g, '') // trim - and spaces from start/end
-        .replace(/-/g, ''); // remove all dashes
+      let cleanPhoneNumber = phoneNumber;
 
-      // Some "copy-paste" numbers from WhatsApp Web contain invisible LTR/RTL marks or strange chars
-      cleanPhoneNumber = cleanPhoneNumber.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
+      // Check if this is a group number
+      const isGroup = typeof cleanPhoneNumber === 'string' && cleanPhoneNumber.includes('@g.us');
 
-      // Defensive: must only have digits or, for group, may end in @g.us, but not contain garbage
-      // For direct numbers, must be 9-31 digits
-      const isGroup = cleanPhoneNumber.includes('@g.us');
       if (!isGroup) {
+        // Whapi expects phone number: remove +, spaces, and any non-digit or hyphen at start/end
+        cleanPhoneNumber = cleanPhoneNumber
+          .replace(/[^\d\-@.]/g, '') // remove ALL non-digit, non-hyphen, non-@, non-dot
+          .replace(/^[-\s]+|[-\s]+$/g, '') // trim - and spaces from start/end
+          .replace(/-/g, ''); // remove all dashes
+
+        // Some "copy-paste" numbers from WhatsApp Web contain invisible LTR/RTL marks or strange chars
+        cleanPhoneNumber = cleanPhoneNumber.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
+
         // Remove @... if present
         const digitsOnly = cleanPhoneNumber.replace(/@.*/, '');
         // Must be only digits and length 9-31
@@ -247,6 +249,7 @@ class WhatsAppService {
         }
         cleanPhoneNumber = digitsOnly;
       }
+      // else: leave group phone number completely as is, no further cleaning
 
       const url = `${this.whapiBaseUrl}/messages/image`;
       const headers = {

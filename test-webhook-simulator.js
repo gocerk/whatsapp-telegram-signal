@@ -8,7 +8,7 @@ async function testWebhookEndpoint() {
 
   // Configuration
   const PORT = process.env.PORT || 80;
-  const baseUrl = `http://104.247.166.151:${PORT}`;
+  const baseUrl = `http://65.21.0.145:${PORT}`;
   const webhookUrl = `${baseUrl}/webhook`;
 
   // Sample trading signal data
