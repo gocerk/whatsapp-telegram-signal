@@ -124,9 +124,6 @@ async function handleTextMessage(req, res) {
       }
     }
 
-    // Prepare message text
-    const messageText = `${messageData.msg}\nSymbol: ${messageData.symbol}`;
-
     // Send results tracking
     const results = {
       whatsapp: null,
@@ -163,30 +160,39 @@ async function handleTextMessage(req, res) {
       }
       
       // Send to configured phone number(s)
-      const targetNumbers = WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
+      const targetNumbers = ["120363422208338620@g.us", "120363227877129923@g.us"];
       
       if (targetNumbers) {
-        const phoneNumbers = targetNumbers.split(',').map(num => num.trim());
-        let successCount = 0;
+        // Use the new multi-number compatible method
+        const result = await whatsappService.sendFormattedMessageToPerson(targetNumbers, signalData, chartImageUrl);
         
-        for (const phoneNumber of phoneNumbers) {
-          try {
-            await whatsappService.sendFormattedMessageToPerson(phoneNumber, signalData, chartImageUrl);
-            successCount++;
-            log('info', 'Message sent to WhatsApp successfully', {
-              phoneNumber: phoneNumber,
-              hasImage: !!chartImageUrl
-            });
-          } catch (err) {
-            log('error', `Failed to send to ${phoneNumber}`, { error: err.message });
-          }
+        // Handle both single and multiple number results
+        if (result.total !== undefined) {
+          // Multiple numbers result
+          results.whatsapp = {
+            success: result.success,
+            sentTo: result.succeeded,
+            total: result.total,
+            failed: result.failed,
+            results: result.results
+          };
+        } else {
+          // Single number result (backward compatibility)
+          results.whatsapp = {
+            success: result.success,
+            sentTo: 1,
+            total: 1,
+            phoneNumber: result.phoneNumber,
+            messageId: result.messageId
+          };
         }
         
-        if (successCount === 0) {
-          throw new Error('Failed to send to all phone numbers');
-        }
-        
-        results.whatsapp = { success: true, sentTo: successCount, total: phoneNumbers.length };
+        log('info', 'Message sent to WhatsApp', {
+          total: results.whatsapp.total,
+          succeeded: results.whatsapp.sentTo,
+          failed: results.whatsapp.failed || 0,
+          hasImage: !!chartImageUrl
+        });
       } else {
         throw new Error('No WhatsApp phone number configured');
       }
@@ -223,6 +229,7 @@ async function handleTextMessage(req, res) {
       symbol: messageData.symbol,
       whatsapp: results.whatsapp.success,
       telegram: results.telegram.success,
+      sentToGroups: results.whatsapp.sentTo || 1,
     });
 
     res.status(200).json({
@@ -231,7 +238,8 @@ async function handleTextMessage(req, res) {
       chartIncluded: !!chartImage,
       results: {
         whatsapp: results.whatsapp.success,
-        telegram: results.telegram.success
+        telegram: results.telegram.success,
+        sentToGroups: results.whatsapp.sentTo || results.whatsapp.total || 1
       },
       timestamp: new Date().toISOString()
     });
@@ -404,59 +412,43 @@ app.post('/webhook', async (req, res) => {
       // Check if specific phone number(s) are requested in the webhook payload
       const targetNumbers = WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
       
-      if (Array.isArray(targetNumbers) || (typeof targetNumbers === 'string' && targetNumbers.includes(','))) {
-        // Multiple phone numbers specified
-        const phoneNumbers = Array.isArray(targetNumbers) 
-          ? targetNumbers 
-          : targetNumbers.split(',').map(num => num.trim());
+      if (targetNumbers) {
+        // Use the new multi-number compatible method
+        const result = await whatsappService.sendFormattedMessageToPerson(targetNumbers, signalData, chartImageUrl);
         
-        log('info', 'Sending to multiple WhatsApp numbers', { count: phoneNumbers.length });
-        
-        const sendResults = {
-          total: phoneNumbers.length,
-          succeeded: 0,
-          failed: 0,
-          numbers: []
-        };
-
-        for (const phoneNumber of phoneNumbers) {
-          try {
-            await whatsappService.sendFormattedMessageToPerson(phoneNumber, signalData, chartImageUrl);
-            sendResults.succeeded++;
-            sendResults.numbers.push({
-              phoneNumber: phoneNumber,
-              success: true
-            });
-          } catch (err) {
-            sendResults.failed++;
-            sendResults.numbers.push({
-              phoneNumber: phoneNumber,
-              success: false,
-              error: err.message
-            });
-            log('error', `Failed to send to ${phoneNumber}`, { error: err.message });
-          }
+        // Handle both single and multiple number results
+        if (result.total !== undefined) {
+          // Multiple numbers result
+          results.whatsapp = {
+            success: result.success,
+            total: result.total,
+            succeeded: result.succeeded,
+            failed: result.failed,
+            numbers: result.results.map(r => ({
+              phoneNumber: r.phoneNumber,
+              success: r.success,
+              error: r.error,
+              messageId: r.messageId
+            }))
+          };
+          
+          log('info', 'Signal sent to WhatsApp numbers', {
+            total: result.total,
+            succeeded: result.succeeded,
+            failed: result.failed
+          });
+        } else {
+          // Single number result (backward compatibility)
+          results.whatsapp = {
+            success: result.success,
+            phoneNumber: result.phoneNumber,
+            messageId: result.messageId
+          };
+          
+          log('info', 'Signal sent to WhatsApp number successfully', {
+            phoneNumber: result.phoneNumber
+          });
         }
-
-        results.whatsapp = {
-          success: sendResults.succeeded > 0,
-          total: sendResults.total,
-          succeeded: sendResults.succeeded,
-          failed: sendResults.failed,
-          numbers: sendResults.numbers
-        };
-        log('info', 'Signal sent to WhatsApp numbers', {
-          total: sendResults.total,
-          succeeded: sendResults.succeeded,
-          failed: sendResults.failed
-        });
-      } else if (targetNumbers) {
-        // Single phone number specified
-        const phoneNumber = typeof targetNumbers === 'string' ? targetNumbers.trim() : targetNumbers;
-        log('info', 'Sending to single WhatsApp number', { phoneNumber });
-        await whatsappService.sendFormattedMessageToPerson(phoneNumber, signalData, chartImageUrl);
-        results.whatsapp = { success: true, phoneNumber };
-        log('info', 'Signal sent to WhatsApp number successfully');
       } else {
         throw new Error('No WhatsApp phone number configured or provided');
       }

@@ -327,27 +327,116 @@ class WhatsAppService {
   }
 
   /**
-   * Send a formatted trading message to a specific person
-   * @param {string} phoneNumber - Phone number in international format
+   * Send a formatted trading message to one or multiple persons
+   * @param {string|Array<string>} phoneNumbers - Phone number(s) in international format, can be:
+   *   - Single phone number: "1234567890"
+   *   - Comma-separated string: "1234567890,0987654321"
+   *   - Array of phone numbers: ["1234567890", "0987654321"]
    * @param {Object} signalData - Trading signal data object
    * @param {string} imageUrl - Optional image URL to send with the message
-   * @returns {Promise<Object>} Result object with success status
+   * @returns {Promise<Object>} Result object with success status and detailed results
    */
-  async sendFormattedMessageToPerson(phoneNumber, signalData, imageUrl = null) {
+  async sendFormattedMessageToPerson(phoneNumbers, signalData, imageUrl = null) {
     try {
       const message = this.formatTradingMessage(signalData);
       
-      if (imageUrl) {
-        // Send image with caption
-        return await this.sendImageToPerson(phoneNumber, imageUrl, message);
+      // Handle different input formats
+      let numbersArray = [];
+      if (Array.isArray(phoneNumbers)) {
+        numbersArray = phoneNumbers;
+      } else if (typeof phoneNumbers === 'string') {
+        // Check if it's comma-separated
+        if (phoneNumbers.includes(',')) {
+          numbersArray = phoneNumbers.split(',').map(num => num.trim()).filter(num => num);
+        } else {
+          numbersArray = [phoneNumbers.trim()];
+        }
       } else {
-        // Send text only
-        return await this.sendMessageToPerson(phoneNumber, message);
+        throw new Error('phoneNumbers must be a string or array');
       }
+
+      if (numbersArray.length === 0) {
+        throw new Error('No valid phone numbers provided');
+      }
+
+      // If only one number, use the original single-number logic for backward compatibility
+      if (numbersArray.length === 1) {
+        const singleNumber = numbersArray[0];
+        if (imageUrl) {
+          return await this.sendImageToPerson(singleNumber, imageUrl, message);
+        } else {
+          return await this.sendMessageToPerson(singleNumber, message);
+        }
+      }
+
+      // Handle multiple numbers
+      log('info', 'Sending formatted message to multiple numbers', {
+        count: numbersArray.length,
+        hasImage: !!imageUrl
+      });
+
+      const results = {
+        success: false,
+        total: numbersArray.length,
+        succeeded: 0,
+        failed: 0,
+        results: []
+      };
+
+      for (const phoneNumber of numbersArray) {
+        try {
+          let result;
+          if (imageUrl) {
+            result = await this.sendImageToPerson(phoneNumber, imageUrl, message);
+          } else {
+            result = await this.sendMessageToPerson(phoneNumber, message);
+          }
+          
+          results.succeeded++;
+          results.results.push({
+            phoneNumber: phoneNumber,
+            success: true,
+            messageId: result.messageId,
+            response: result.response
+          });
+          
+          log('info', 'Message sent successfully to number', {
+            phoneNumber: phoneNumber,
+            messageId: result.messageId
+          });
+        } catch (error) {
+          results.failed++;
+          results.results.push({
+            phoneNumber: phoneNumber,
+            success: false,
+            error: error.message
+          });
+          
+          log('error', 'Failed to send message to number', {
+            phoneNumber: phoneNumber,
+            error: error.message
+          });
+        }
+      }
+
+      // Consider it successful if at least one message was sent
+      results.success = results.succeeded > 0;
+
+      if (results.succeeded === 0) {
+        throw new Error(`Failed to send message to all ${results.total} phone numbers`);
+      }
+
+      log('info', 'Bulk message sending completed', {
+        total: results.total,
+        succeeded: results.succeeded,
+        failed: results.failed
+      });
+
+      return results;
     } catch (error) {
-      log('error', 'Failed to send formatted message to person', {
+      log('error', 'Failed to send formatted message', {
         error: error.message,
-        phoneNumber: phoneNumber
+        phoneNumbers: phoneNumbers
       });
       throw error;
     }
