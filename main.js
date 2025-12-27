@@ -16,6 +16,22 @@ const PORT = process.env.PORT || 80;
 const CHARTS_DIR = path.join(__dirname, 'uploads', 'charts');
 const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
 
+// Helper function to format date in Turkish format
+const formatTurkishDate = (date = new Date()) => {
+  const months = [
+    'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+  ];
+  
+  const day = date.getDate();
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  
+  return `${day} ${month} ${year} ${hours}:${minutes}`;
+};
+
 // Logging utility
 const log = (level, message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -89,7 +105,7 @@ async function handleTextMessage(req, res) {
     const messageData = {
       msg: msg.trim(),
       symbol: symbol.trim(),
-      timestamp: new Date().toISOString()
+      timestamp: formatTurkishDate()
     };
 
     // Get chart image for the symbol
@@ -130,25 +146,26 @@ async function handleTextMessage(req, res) {
       telegram: null
     };
 
+    // Prepare signal data format for both WhatsApp and Telegram
+    const signalData = {
+      title: messageData.msg,
+      datetime: messageData.timestamp,
+      action: '',
+      symbol: messageData.symbol,
+      price: '',
+      // Include all other properties from the request body
+      ...Object.keys(req.body).reduce((acc, key) => {
+        const lowerKey = key.toLowerCase();
+        // Exclude already processed keys
+        if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids'].includes(lowerKey)) {
+          acc[key] = req.body[key];
+        }
+        return acc;
+      }, {})
+    };
+
     // Send to WhatsApp (with chart image if available)
     try {
-      // Prepare signal data format for WhatsApp sendFormattedMessageToPerson
-      const signalData = {
-        title: messageData.msg,
-        datetime: messageData.timestamp,
-        action: '',
-        symbol: messageData.symbol,
-        price: '',
-        // Include all other properties from the request body
-        ...Object.keys(req.body).reduce((acc, key) => {
-          const lowerKey = key.toLowerCase();
-          // Exclude already processed keys
-          if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids'].includes(lowerKey)) {
-            acc[key] = req.body[key];
-          }
-          return acc;
-        }, {})
-      };
       
       // Save chart image and get URL if available
       let chartImageUrl = null;

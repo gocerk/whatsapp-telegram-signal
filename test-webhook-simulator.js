@@ -13,11 +13,8 @@ async function testWebhookEndpoint() {
 
   // Sample trading signal data
   const signalData = {
-    title: "Yeni İşlem Önerisi",
-    datetime: new Date().toLocaleString('tr-TR'),
-    action: "BUY",
+    msg: "test mesaji",
     symbol: "BTCUSD",
-    price: "45000.00"
   };
 
   console.log('📊 Testing webhook endpoint:', webhookUrl);
