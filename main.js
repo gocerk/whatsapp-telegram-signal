@@ -55,8 +55,8 @@ app.use(express.text({ type: 'text/plain', limit: '10mb' }));
 // Middleware to handle raw JSON that might come without proper content-type
 app.use((req, res, next) => {
   console.log('Raw body:', req.body);
-  // If body is a string, try to parse it as JSON
-  if (req.body) {
+  // Only try to parse if body is a string and looks like JSON
+  if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
     try {
       req.body = JSON.parse(req.body);
     } catch (e) {
