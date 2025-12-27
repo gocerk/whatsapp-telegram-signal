@@ -55,7 +55,7 @@ app.use(express.text({ type: 'text/plain', limit: '10mb' }));
 // Middleware to handle raw JSON that might come without proper content-type
 app.use((req, res, next) => {
   // If body is a string, try to parse it as JSON
-  if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
+  if (req.body) {
     try {
       req.body = JSON.parse(req.body);
     } catch (e) {
@@ -339,7 +339,7 @@ app.post('/webhook', async (req, res) => {
     log('info', 'Received webhook payload', req.body);
 
     // Check if this is a simple text message format
-    if (req.body.msg && req.body.symbol) {
+    if (req.body.msg) {
       return await handleTextMessage(req, res);
     }
 
