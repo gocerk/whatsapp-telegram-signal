@@ -364,8 +364,11 @@ _Trading signal from TradingView_`;
 
   /**
    * Send formatted trading message to Telegram
+   * @param {object} signalData - Signal data to format and send
+   * @param {Buffer|object|null} chartImage - Optional chart image
+   * @param {string|number|null} chatId - Optional specific chat ID (uses all configured chat IDs if not provided)
    */
-  async sendFormattedMessage(signalData, chartImage = null) {
+  async sendFormattedMessage(signalData, chartImage = null, chatId = null) {
     // Use the simple format as in the provided code
     const message = this.formatTradingViewMessage(signalData);
     
@@ -373,25 +376,25 @@ _Trading signal from TradingView_`;
       try {
         // Try to send with chart image
         if (chartImage.buffer || Buffer.isBuffer(chartImage)) {
-          return await this.sendPhoto(chartImage, message);
+          return await this.sendPhoto(chartImage, message, 'HTML', chatId);
         } else if (chartImage.url) {
-          return await this.sendPhoto(chartImage.url, message);
+          return await this.sendPhoto(chartImage.url, message, 'HTML', chatId);
         } else {
           // Fallback to text only
           log('warn', 'Invalid chart image format, sending text only');
-          return await this.sendMessage(message);
+          return await this.sendMessage(message, 'HTML', chatId);
         }
       } catch (error) {
         // If sending photo fails, fallback to text message
         log('warn', 'Failed to send photo, falling back to text message', {
           error: error.message
         });
-        return await this.sendMessage(message);
+        return await this.sendMessage(message, 'HTML', chatId);
       }
     }
     
     // Send text message only
-    return await this.sendMessage(message);
+    return await this.sendMessage(message, 'HTML', chatId);
   }
 
   validateConfiguration() {

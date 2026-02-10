@@ -326,6 +326,12 @@ app.post('/webhook', async (req, res) => {
       return await handleTextMessage(req, res);
     }
 
+    // Check if this is a private message (should only go to Telegram private group)
+    const isPrivate = req.body.private === 'yes' || req.body.private === true;
+    
+    // Check if this is a test message (should only go to Telegram test group)
+    const isTest = req.body.test === 'yes' || req.body.test === true;
+
     // Validate required fields for trading signal format
     const { title, datetime, action, symbol, price } = req.body;
     
@@ -355,7 +361,7 @@ app.post('/webhook', async (req, res) => {
       ...Object.keys(req.body).reduce((acc, key) => {
         const lowerKey = key.toLowerCase();
         // Exclude already processed keys and common webhook fields
-        if (!['title', 'datetime', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids'].includes(lowerKey)) {
+        if (!['title', 'datetime', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test'].includes(lowerKey)) {
           acc[key] = req.body[key];
         }
         return acc;
@@ -398,77 +404,130 @@ app.post('/webhook', async (req, res) => {
       telegram: null
     };
 
-    // Send to WhatsApp
-    try {
-      // Save chart image and get URL if available
-      let chartImageUrl = null;
-      if (chartImage) {
-        chartImageUrl = await saveChartImage(chartImage, symbol);
-        if (chartImageUrl) {
-          log('info', 'Chart image URL generated', { url: chartImageUrl });
-        }
-      }
-
-      // Check if specific phone number(s) are requested in the webhook payload
-      const targetNumbers = WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
+    // If test message, only send to Telegram test group
+    if (isTest) {
+      log('info', 'Test message detected - sending only to Telegram test group');
       
-      if (targetNumbers) {
-        // Use the new multi-number compatible method
-        const result = await whatsappService.sendFormattedMessageToPerson(targetNumbers, signalData, chartImageUrl);
-        
-        // Handle both single and multiple number results
-        if (result.total !== undefined) {
-          // Multiple numbers result
-          results.whatsapp = {
-            success: result.success,
-            total: result.total,
-            succeeded: result.succeeded,
-            failed: result.failed,
-            numbers: result.results.map(r => ({
-              phoneNumber: r.phoneNumber,
-              success: r.success,
-              error: r.error,
-              messageId: r.messageId
-            }))
-          };
-          
-          log('info', 'Signal sent to WhatsApp numbers', {
-            total: result.total,
-            succeeded: result.succeeded,
-            failed: result.failed
-          });
-        } else {
-          // Single number result (backward compatibility)
-          results.whatsapp = {
-            success: result.success,
-            phoneNumber: result.phoneNumber,
-            messageId: result.messageId
-          };
-          
-          log('info', 'Signal sent to WhatsApp number successfully', {
-            phoneNumber: result.phoneNumber
-          });
+      // Send to Telegram test group only
+      try {
+        const testChatId = process.env.TELEGRAM_TEST_GROUP_CHAT_ID;
+        if (!testChatId) {
+          throw new Error('TELEGRAM_TEST_GROUP_CHAT_ID not configured in environment variables');
         }
-      } else {
-        throw new Error('No WhatsApp phone number configured or provided');
+        
+        await telegramService.sendFormattedMessage(signalData, chartImage, testChatId);
+        results.telegram = { success: true, chatId: testChatId };
+        log('info', 'Test signal sent to Telegram test group successfully', { chatId: testChatId });
+      } catch (telegramError) {
+        log('error', 'Failed to send test message to Telegram', {
+          error: telegramError.message
+        });
+        results.telegram = { success: false, error: telegramError.message };
       }
-    } catch (whatsappError) {
-      log('error', 'Failed to send to WhatsApp', {
-        error: whatsappError.message
-      });
-      results.whatsapp = { success: false, error: whatsappError.message };
+      
+      // Skip WhatsApp for test messages
+      results.whatsapp = { success: true, skipped: true, reason: 'Test message - Telegram only' };
     }
+    // If private message, only send to Telegram private group
+    else if (isPrivate) {
+      log('info', 'Private message detected - sending only to Telegram private group');
+      
+      // Send to Telegram private group only
+      try {
+        const privateChatId = process.env.TELEGRAM_PRIVATE_GROUP_CHAT_ID;
+        if (!privateChatId) {
+          throw new Error('TELEGRAM_PRIVATE_GROUP_CHAT_ID not configured in environment variables');
+        }
+        
+        await telegramService.sendFormattedMessage(signalData, chartImage, privateChatId);
+        results.telegram = { success: true, chatId: privateChatId };
+        log('info', 'Private signal sent to Telegram private group successfully', { chatId: privateChatId });
+      } catch (telegramError) {
+        log('error', 'Failed to send private message to Telegram', {
+          error: telegramError.message
+        });
+        results.telegram = { success: false, error: telegramError.message };
+      }
+      
+      // Skip WhatsApp for private messages
+      results.whatsapp = { success: true, skipped: true, reason: 'Private message - Telegram only' };
+    }
+    // Normal message - send to both WhatsApp and Telegram
+    else {
+      // Normal message - send to both WhatsApp and Telegram
+      
+      // Send to WhatsApp
+      try {
+        // Save chart image and get URL if available
+        let chartImageUrl = null;
+        if (chartImage) {
+          chartImageUrl = await saveChartImage(chartImage, symbol);
+          if (chartImageUrl) {
+            log('info', 'Chart image URL generated', { url: chartImageUrl });
+          }
+        }
 
-    // Send to Telegram
-    try {
-      await telegramService.sendFormattedMessage(signalData, chartImage);
-      results.telegram = { success: true };
-      log('info', 'Signal sent to Telegram successfully');
-    } catch (telegramError) {
-      log('error', 'Failed to send to Telegram', {
-        error: telegramError.message
-      });
-      results.telegram = { success: false, error: telegramError.message };
+        // Check if specific phone number(s) are requested in the webhook payload
+        const targetNumbers = WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
+        
+        if (targetNumbers) {
+          // Use the new multi-number compatible method
+          const result = await whatsappService.sendFormattedMessageToPerson(targetNumbers, signalData, chartImageUrl);
+          
+          // Handle both single and multiple number results
+          if (result.total !== undefined) {
+            // Multiple numbers result
+            results.whatsapp = {
+              success: result.success,
+              total: result.total,
+              succeeded: result.succeeded,
+              failed: result.failed,
+              numbers: result.results.map(r => ({
+                phoneNumber: r.phoneNumber,
+                success: r.success,
+                error: r.error,
+                messageId: r.messageId
+              }))
+            };
+            
+            log('info', 'Signal sent to WhatsApp numbers', {
+              total: result.total,
+              succeeded: result.succeeded,
+              failed: result.failed
+            });
+          } else {
+            // Single number result (backward compatibility)
+            results.whatsapp = {
+              success: result.success,
+              phoneNumber: result.phoneNumber,
+              messageId: result.messageId
+            };
+            
+            log('info', 'Signal sent to WhatsApp number successfully', {
+              phoneNumber: result.phoneNumber
+            });
+          }
+        } else {
+          throw new Error('No WhatsApp phone number configured or provided');
+        }
+      } catch (whatsappError) {
+        log('error', 'Failed to send to WhatsApp', {
+          error: whatsappError.message
+        });
+        results.whatsapp = { success: false, error: whatsappError.message };
+      }
+
+      // Send to Telegram (all configured chats)
+      try {
+        await telegramService.sendFormattedMessage(signalData, chartImage);
+        results.telegram = { success: true };
+        log('info', 'Signal sent to Telegram successfully');
+      } catch (telegramError) {
+        log('error', 'Failed to send to Telegram', {
+          error: telegramError.message
+        });
+        results.telegram = { success: false, error: telegramError.message };
+      }
     }
 
     // Check if at least one service succeeded
@@ -483,13 +542,25 @@ app.post('/webhook', async (req, res) => {
       action: signalData.action,
       price,
       chartIncluded: !!chartImage,
+      isPrivate,
+      isTest,
       whatsapp: results.whatsapp.success,
       telegram: results.telegram.success
     });
 
+    // Determine response message
+    let responseMessage = 'Signal sent successfully';
+    if (isTest) {
+      responseMessage = 'Test signal sent to Telegram test group only';
+    } else if (isPrivate) {
+      responseMessage = 'Private signal sent to Telegram private group only';
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Signal sent successfully',
+      message: responseMessage,
+      isPrivate,
+      isTest,
       chartIncluded: !!chartImage,
       results: {
         whatsapp: results.whatsapp.success,
