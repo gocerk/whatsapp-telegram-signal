@@ -13,8 +13,14 @@ const log = (level, message, data = null) => {
 class TelegramService {
   constructor() {
     this.botToken = process.env.TELEGRAM_BOT_TOKEN;
-    this.chatId = process.env.TELEGRAM_CHAT_ID;
-    this.apiUrl = this.botToken 
+    // Parse comma-separated chat IDs
+    const chatIdEnv = process.env.TELEGRAM_CHAT_ID;
+    this.chatIds = chatIdEnv
+      ? chatIdEnv.split(',').map(id => id.trim()).filter(id => id)
+      : [];
+    // Keep chatId for backward compatibility (first chat ID)
+    this.chatId = this.chatIds[0] || null;
+    this.apiUrl = this.botToken
       ? `https://api.telegram.org/bot${this.botToken}`
       : null;
     
@@ -22,13 +28,14 @@ class TelegramService {
   }
 
   initializeService() {
-    if (!this.botToken || !this.chatId) {
+    if (!this.botToken || this.chatIds.length === 0) {
       log('warn', 'Telegram bot token or chat ID not configured');
       return;
     }
     
     log('info', 'Telegram service initialized successfully', {
-      chatId: this.chatId,
+      chatIds: this.chatIds,
+      chatCount: this.chatIds.length,
       hasToken: !!this.botToken
     });
   }
@@ -116,21 +123,12 @@ _Trading signal from TradingView_`;
   }
 
   /**
-   * Send message to Telegram
+   * Send message to a single chat
    * @param {string} message - Message text to send
    * @param {string} parseMode - Parse mode (HTML, Markdown, etc.)
-   * @param {string|number} chatId - Optional chat ID (uses default if not provided)
+   * @param {string|number} targetChatId - Target chat ID
    */
-  async sendMessage(message, parseMode = 'HTML', chatId = null) {
-    if (!this.botToken) {
-      throw new Error('TELEGRAM_BOT_TOKEN must be set in environment variables');
-    }
-
-    const targetChatId = chatId || this.chatId;
-    if (!targetChatId) {
-      throw new Error('TELEGRAM_CHAT_ID must be set in environment variables or provided as parameter');
-    }
-
+  async sendMessageToChat(message, parseMode, targetChatId) {
     try {
       const response = await axios.post(`${this.apiUrl}/sendMessage`, {
         chat_id: targetChatId,
@@ -146,6 +144,7 @@ _Trading signal from TradingView_`;
       return {
         success: true,
         messageId: response.data.result?.message_id,
+        chatId: targetChatId,
         data: response.data
       };
     } catch (error) {
@@ -182,20 +181,71 @@ _Trading signal from TradingView_`;
   }
 
   /**
-   * Send photo with caption to Telegram
+   * Send message to Telegram (supports multiple chat IDs)
+   * @param {string} message - Message text to send
+   * @param {string} parseMode - Parse mode (HTML, Markdown, etc.)
+   * @param {string|number|null} chatId - Optional specific chat ID (uses all configured chat IDs if not provided)
    */
-  async sendPhoto(photo, caption = '', parseMode = 'HTML') {
-    if (!this.botToken || !this.chatId) {
-      throw new Error('TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set in environment variables');
+  async sendMessage(message, parseMode = 'HTML', chatId = null) {
+    if (!this.botToken) {
+      throw new Error('TELEGRAM_BOT_TOKEN must be set in environment variables');
     }
 
+    // If specific chatId provided, send only to that chat
+    if (chatId) {
+      return await this.sendMessageToChat(message, parseMode, chatId);
+    }
+
+    // Send to all configured chat IDs
+    if (this.chatIds.length === 0) {
+      throw new Error('TELEGRAM_CHAT_ID must be set in environment variables or provided as parameter');
+    }
+
+    const results = [];
+    const errors = [];
+
+    for (const targetChatId of this.chatIds) {
+      try {
+        const result = await this.sendMessageToChat(message, parseMode, targetChatId);
+        results.push(result);
+      } catch (error) {
+        errors.push({
+          chatId: targetChatId,
+          error: error.message
+        });
+      }
+    }
+
+    // If all sends failed, throw error
+    if (results.length === 0 && errors.length > 0) {
+      throw new Error(`Failed to send message to all chats: ${JSON.stringify(errors)}`);
+    }
+
+    log('info', `Message sent to ${results.length}/${this.chatIds.length} chats`, {
+      successful: results.length,
+      failed: errors.length
+    });
+
+    return {
+      success: true,
+      results,
+      errors: errors.length > 0 ? errors : undefined,
+      totalChats: this.chatIds.length,
+      successfulChats: results.length
+    };
+  }
+
+  /**
+   * Send photo to a single chat
+   */
+  async sendPhotoToChat(photo, caption, parseMode, targetChatId) {
     try {
       // Handle different photo formats
       if (Buffer.isBuffer(photo) || photo.buffer) {
         // For buffer, we need to send as multipart/form-data
         const FormData = require('form-data');
         const form = new FormData();
-        form.append('chat_id', this.chatId);
+        form.append('chat_id', targetChatId);
         
         // Handle buffer correctly - extract the actual buffer
         const actualBuffer = Buffer.isBuffer(photo) ? photo : photo.buffer;
@@ -214,18 +264,19 @@ _Trading signal from TradingView_`;
 
         log('info', 'Photo sent successfully', {
           messageId: response.data.result?.message_id,
-          chatId: this.chatId
+          chatId: targetChatId
         });
 
         return {
           success: true,
           messageId: response.data.result?.message_id,
+          chatId: targetChatId,
           data: response.data
         };
       } else if (typeof photo === 'string') {
         // URL or file_id
         const response = await axios.post(`${this.apiUrl}/sendPhoto`, {
-          chat_id: this.chatId,
+          chat_id: targetChatId,
           photo: photo,
           caption: caption,
           parse_mode: parseMode
@@ -233,12 +284,13 @@ _Trading signal from TradingView_`;
 
         log('info', 'Photo sent successfully', {
           messageId: response.data.result?.message_id,
-          chatId: this.chatId
+          chatId: targetChatId
         });
 
         return {
           success: true,
           messageId: response.data.result?.message_id,
+          chatId: targetChatId,
           data: response.data
         };
       } else {
@@ -247,10 +299,67 @@ _Trading signal from TradingView_`;
     } catch (error) {
       log('error', 'Failed to send photo', {
         error: error.response?.data || error.message,
-        status: error.response?.status
+        status: error.response?.status,
+        chatId: targetChatId
       });
       throw error;
     }
+  }
+
+  /**
+   * Send photo with caption to Telegram (supports multiple chat IDs)
+   * @param {Buffer|string|object} photo - Photo buffer, URL, or object with buffer property
+   * @param {string} caption - Photo caption
+   * @param {string} parseMode - Parse mode (HTML, Markdown, etc.)
+   * @param {string|number|null} chatId - Optional specific chat ID (uses all configured chat IDs if not provided)
+   */
+  async sendPhoto(photo, caption = '', parseMode = 'HTML', chatId = null) {
+    if (!this.botToken) {
+      throw new Error('TELEGRAM_BOT_TOKEN must be set in environment variables');
+    }
+
+    // If specific chatId provided, send only to that chat
+    if (chatId) {
+      return await this.sendPhotoToChat(photo, caption, parseMode, chatId);
+    }
+
+    // Send to all configured chat IDs
+    if (this.chatIds.length === 0) {
+      throw new Error('TELEGRAM_CHAT_ID must be set in environment variables');
+    }
+
+    const results = [];
+    const errors = [];
+
+    for (const targetChatId of this.chatIds) {
+      try {
+        const result = await this.sendPhotoToChat(photo, caption, parseMode, targetChatId);
+        results.push(result);
+      } catch (error) {
+        errors.push({
+          chatId: targetChatId,
+          error: error.message
+        });
+      }
+    }
+
+    // If all sends failed, throw error
+    if (results.length === 0 && errors.length > 0) {
+      throw new Error(`Failed to send photo to all chats: ${JSON.stringify(errors)}`);
+    }
+
+    log('info', `Photo sent to ${results.length}/${this.chatIds.length} chats`, {
+      successful: results.length,
+      failed: errors.length
+    });
+
+    return {
+      success: true,
+      results,
+      errors: errors.length > 0 ? errors : undefined,
+      totalChats: this.chatIds.length,
+      successfulChats: results.length
+    };
   }
 
   /**

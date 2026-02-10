@@ -72,18 +72,12 @@ async function getAllSentNewsIds() {
 /**
  * Format news item for Telegram
  */
-function formatNewsForTelegram(newsItem) {
-  const publishDate = newsItem.publishDate 
-    ? new Date(newsItem.publishDate).toLocaleString('tr-TR')
-    : 'Tarih bilgisi yok';
-  
+function formatNewsForTelegram(newsItem) {  
   let message = `📰 *${newsItem.header || 'Haber'}*\n\n`;
   
   if (newsItem.summary) {
     message += `${newsItem.summary}\n\n`;
   }
-  
-  message += `📅 *Tarih:* ${publishDate}\n`;
   
   return message;
 }
@@ -92,17 +86,11 @@ function formatNewsForTelegram(newsItem) {
  * Format news item for WhatsApp
  */
 function formatNewsForWhatsApp(newsItem) {
-  const publishDate = newsItem.publishDate 
-    ? new Date(newsItem.publishDate).toLocaleString('tr-TR')
-    : 'Tarih bilgisi yok';
-  
   let message = `📰 ${newsItem.header || 'Haber'}\n\n`;
   
   if (newsItem.summary) {
     message += `${newsItem.summary}\n\n`;
   }
-  
-  message += `📅 Tarih: ${publishDate}`;
   
   return message;
 }

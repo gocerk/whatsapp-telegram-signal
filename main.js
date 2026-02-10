@@ -14,23 +14,6 @@ const PORT = process.env.PORT || 80;
 
 // Chart images directory
 const CHARTS_DIR = path.join(__dirname, 'uploads', 'charts');
-const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
-
-// Helper function to format date in Turkish format
-const formatTurkishDate = (date = new Date()) => {
-  const months = [
-    'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
-    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
-  ];
-  
-  const day = date.getDate();
-  const month = months[date.getMonth()];
-  const year = date.getFullYear();
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  
-  return `${day} ${month} ${year} ${hours}:${minutes}`;
-};
 
 // Logging utility
 const log = (level, message, data = null) => {
@@ -106,7 +89,6 @@ async function handleTextMessage(req, res) {
     const messageData = {
       msg: msg.trim(),
       symbol: symbol.trim(),
-      timestamp: formatTurkishDate()
     };
 
     // Get chart image for the symbol
