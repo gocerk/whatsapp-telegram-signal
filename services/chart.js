@@ -170,14 +170,21 @@ class ChartService {
 
 
       const closeWarningSelector = '#overlap-manager-root > div:nth-child(2) > div > div.wrap-VeoIyDt4 > div > div > div.modal-AIyNn2YU.radius-AIyNn2YU.dialog-VeoIyDt4.dialog-aRAWUDhF.rounded-aRAWUDhF > div > div.closeButtonWrapper-AIyNn2YU > button';
-
-          // Uyarı penceresi varsa kapat
       try {
           await page.waitForSelector(closeWarningSelector, { timeout: 5000 });
           await page.click(closeWarningSelector);
           console.log('Uyarı penceresi kapatıldı.');
       } catch (e) {
           console.log('Uyarı penceresi bulunamadı veya zaman aşımına uğradı.');
+      }
+
+      const popupCloseSelector = '#\:ri\: > li > div > div > div > div.contentContainerWrapper-zMOxH_8U > div > div > div > div.closeButton-zMOxH_8U > button';
+      try {
+          await page.waitForSelector(popupCloseSelector, { timeout: 5000 });
+          await page.click(popupCloseSelector);
+          console.log('Pop-up kapatıldı.');
+      } catch (e) {
+          console.log('Pop-up bulunamadı veya zaman aşımına uğradı.');
       }
 
       await new Promise(r => setTimeout(r, 500));

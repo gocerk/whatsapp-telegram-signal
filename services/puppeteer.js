@@ -55,6 +55,17 @@ require('dotenv').config('../.env');
         console.log('Uyarı penceresi bulunamadı veya zaman aşımına uğradı.');
     }
 
+    const popupCloseSelector = '#\:ri\: > li > div > div > div > div.contentContainerWrapper-zMOxH_8U > div > div > div > div.closeButton-zMOxH_8U > button';
+    
+    // Pop-up varsa kapat  
+    try {
+        await page.waitForSelector(popupCloseSelector, { timeout: 5000 });
+        await page.click(popupCloseSelector);
+        console.log('Pop-up kapatıldı.');
+    } catch (e) {
+        console.log('Pop-up bulunamadı veya zaman aşımına uğradı.');
+    }
+
     // 5. Grafiğin Tam Yüklenmesini Bekle
     // Grafik mumlarının bulunduğu ana canvas elementinin yüklenmesini bekleriz.
     try {        
@@ -94,18 +105,18 @@ require('dotenv').config('../.env');
     */
 
     // 7. Ekran Görüntüsünü Al ve Kaydet
-    const selector = 'body > div.js-rootresizer__contents > div > div.layout__area--center.unselectable > div.chart-container.single-visible.top-full-width-chart.active > div.chart-container-border > div > div.chart-markup-table > div:nth-child(1) > div.chart-markup-table.pane > div > canvas:nth-child(3)';
-    const element = await page.$(selector);
-    if(element) {
-        await element.screenshot({ path: 'tradingview_grafik.png' });
-    } else {
-        console.log(`Grafik alanı ('${selector}') bulunamadı, tam sayfa ekran görüntüsü alınıyor.`);
-        await page.screenshot({ path: 'tradingview_grafik.png', fullPage: false });
-    }
+    // const selector = 'body > div.js-rootresizer__contents > div > div.layout__area--center.unselectable > div.chart-container.single-visible.top-full-width-chart.active > div.chart-container-border > div > div.chart-markup-table > div:nth-child(1) > div.chart-markup-table.pane > div > canvas:nth-child(3)';
+    // const element = await page.$(selector);
+    // if(element) {
+    //     await element.screenshot({ path: 'tradingview_grafik.png' });
+    // } else {
+    //     console.log(`Grafik alanı ('${selector}') bulunamadı, tam sayfa ekran görüntüsü alınıyor.`);
+    //     await page.screenshot({ path: 'tradingview_grafik.png', fullPage: false });
+    // }
 
-    console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
+    // console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
 
-    await browser.close();
+    // await browser.close();
 })("BINANCE:BTCUSDT");
 
 // module.exports = { getChartImage };
