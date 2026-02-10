@@ -39,39 +39,39 @@ require('dotenv').config('../.env');
 
     // 4. Hedef Grafik URL'sine Git
     // Örnek: https://tr.tradingview.com/chart/M3C0dE/?symbol=BINANCE%3ABTCUSDT
-    const chartUrl = 'https://tr.tradingview.com/chart/4atOlnQu?symbol=' + encodeURIComponent(currency); 
+    const chartUrl = 'https://tr.tradingview.com/chart/ASXc6cgm?symbol=' + encodeURIComponent(currency); 
     
     console.log('Grafiğe gidiliyor...');
     await page.goto(chartUrl);
 
     // 5. Grafiğin Tam Yüklenmesini Bekle
     // Grafik mumlarının bulunduğu ana canvas elementinin yüklenmesini bekleriz.
-    try {        
+    // try {        
 
-        await new Promise(r => setTimeout(r, 4000));
-        // // --- YENİ EKLENEN KISIM: GRAFİĞİ SÜRÜKLEME ---
-        console.log('Grafik sola sürükleniyor...');
+    //     await new Promise(r => setTimeout(r, 4000));
+    //     // // --- YENİ EKLENEN KISIM: GRAFİĞİ SÜRÜKLEME ---
+    //     console.log('Grafik sola sürükleniyor...');
         
-        // Ekranın ortasını hesapla
-        const viewport = page.viewport();
-        const startX = viewport.width / 3;
-        const startY = viewport.height / 2;
+    //     // Ekranın ortasını hesapla
+    //     const viewport = page.viewport();
+    //     const startX = viewport.width / 3;
+    //     const startY = viewport.height / 2;
 
-        // Fareyi ortaya getir ve tıkla
-        await page.mouse.move(startX, startY);
-        await page.mouse.down();
+    //     // Fareyi ortaya getir ve tıkla
+    //     await page.mouse.move(startX, startY);
+    //     await page.mouse.down();
 
-        // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
-        // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
-        await page.mouse.move(startX - 200, startY, { steps: 100 }); 
+    //     // Fareyi sola doğru sürükle (Örn: 400 piksel sola)
+    //     // steps: 10 hareketi daha doğal yapar ve TradingView'in algılamasını sağlar
+    //     await page.mouse.move(startX - 200, startY, { steps: 100 }); 
         
-        // Fareyi bırak
-        await page.mouse.up();
+    //     // Fareyi bırak
+    //     await page.mouse.up();
         
-    } catch (e) {
-        console.log(e);
-        console.log('Zaman aşımı veya seçici bulunamadı.');
-    }
+    // } catch (e) {
+    //     console.log(e);
+    //     console.log('Zaman aşımı veya seçici bulunamadı.');
+    // }
 
     // 6. İstenmeyen Elementleri Gizle (Opsiyonel)
     // Örneğin sağdaki izleme listesini veya alttaki paneli gizlemek isterseniz CSS manipülasyonu yapabilirsiniz.
@@ -83,16 +83,16 @@ require('dotenv').config('../.env');
     */
 
     // 7. Ekran Görüntüsünü Al ve Kaydet
-    const selector = 'body > div.js-rootresizer__contents > div';
-    const element = await page.$(selector);
-    if(element) {
-        await element.screenshot({ path: 'tradingview_grafik.png' });
-    } else {
-        console.log(`Grafik alanı ('${selector}') bulunamadı, tam sayfa ekran görüntüsü alınıyor.`);
-        await page.screenshot({ path: 'tradingview_grafik.png', fullPage: false });
-    }
+    // const selector = 'body > div.js-rootresizer__contents > div';
+    // const element = await page.$(selector);
+    // if(element) {
+    //     await element.screenshot({ path: 'tradingview_grafik.png' });
+    // } else {
+    //     console.log(`Grafik alanı ('${selector}') bulunamadı, tam sayfa ekran görüntüsü alınıyor.`);
+    //     await page.screenshot({ path: 'tradingview_grafik.png', fullPage: false });
+    // }
 
-    console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
+    // console.log('Ekran görüntüsü kaydedildi: tradingview_grafik.png');
 
     // await browser.close();
 })("FX:CADJPY");

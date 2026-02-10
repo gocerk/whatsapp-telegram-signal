@@ -162,13 +162,25 @@ class ChartService {
         if (closeButton) {
           log('info', `Popup detected, closing it for ${symbol}`);
           await closeButton.click();
-          // Wait a bit after closing popup
-          await new Promise(r => setTimeout(r, 500));
         }
       } catch (error) {
         log('warn', `Error checking/closing popup for ${symbol}`, { error: error.message });
         // Continue even if popup handling fails
       }
+
+
+      const closeWarningSelector = '#overlap-manager-root > div:nth-child(2) > div > div.wrap-VeoIyDt4 > div > div > div.modal-AIyNn2YU.radius-AIyNn2YU.dialog-VeoIyDt4.dialog-aRAWUDhF.rounded-aRAWUDhF > div > div.closeButtonWrapper-AIyNn2YU > button';
+
+          // Uyarı penceresi varsa kapat
+      try {
+          await page.waitForSelector(closeWarningSelector, { timeout: 5000 });
+          await page.click(closeWarningSelector);
+          console.log('Uyarı penceresi kapatıldı.');
+      } catch (e) {
+          console.log('Uyarı penceresi bulunamadı veya zaman aşımına uğradı.');
+      }
+
+      await new Promise(r => setTimeout(r, 500));
       
       log('info', `Chart loaded, dragging for ${symbol}`);
       
