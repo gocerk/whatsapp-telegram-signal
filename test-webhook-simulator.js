@@ -14,7 +14,8 @@ async function testWebhookEndpoint() {
   // Sample trading signal data
   const signalData = {
     msg: "test mesaji",
-    symbol: "BTCUSD",
+    symbol: "BINANCE:BTCUSD",
+    test: "yes",
   };
 
   console.log('📊 Testing webhook endpoint:', webhookUrl);

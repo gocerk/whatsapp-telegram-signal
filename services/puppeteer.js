@@ -55,15 +55,18 @@ require('dotenv').config('../.env');
         console.log('Uyarı penceresi bulunamadı veya zaman aşımına uğradı.');
     }
 
-    const popupCloseSelector = '#\:ri\: > li > div > div > div > div.contentContainerWrapper-zMOxH_8U > div > div > div > div.closeButton-zMOxH_8U > button';
-    
-    // Pop-up varsa kapat  
+    const toastsContainer = "#overlap-manager-root > div";
     try {
-        await page.waitForSelector(popupCloseSelector, { timeout: 5000 });
-        await page.click(popupCloseSelector);
-        console.log('Pop-up kapatıldı.');
+        await page.waitForSelector(toastsContainer, { timeout: 5000 });
+        await page.evaluate((selector) => {
+            const toasts = document.querySelector(selector);
+            if (toasts) {
+                toasts.style.display = 'none';
+                console.log('Toast mesajları gizlendi.');
+            }
+        }, toastsContainer);
     } catch (e) {
-        console.log('Pop-up bulunamadı veya zaman aşımına uğradı.');
+        console.log('Toast mesajları bulunamadı veya zaman aşımına uğradı.');
     }
 
     // 5. Grafiğin Tam Yüklenmesini Bekle
