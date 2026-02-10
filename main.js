@@ -107,7 +107,8 @@ async function handleTextMessage(req, res) {
         // Get chart image with basic options
         const chartOptions = {
           width: 800,
-          height: 600
+          height: 600,
+          time: req.body.time // Pass time parameter for chart URL selection
         };
 
         const chartResult = await chartService.getChartImage(formattedSymbol, chartOptions);
@@ -138,7 +139,6 @@ async function handleTextMessage(req, res) {
     // Prepare signal data format for both WhatsApp and Telegram
     const signalData = {
       title: messageData.msg,
-      datetime: messageData.timestamp,
       action: '',
       symbol: messageData.symbol,
       price: '',
@@ -146,7 +146,7 @@ async function handleTextMessage(req, res) {
       ...Object.keys(req.body).reduce((acc, key) => {
         const lowerKey = key.toLowerCase();
         // Exclude already processed keys
-        if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test'].includes(lowerKey)) {
+        if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'time'].includes(lowerKey)) {
           acc[key] = req.body[key];
         }
         return acc;
@@ -402,7 +402,7 @@ app.post('/webhook', async (req, res) => {
     const isTest = req.body.test === 'yes' || req.body.test === true;
 
     // Validate required fields for trading signal format
-    const { title, datetime, action, symbol, price } = req.body;
+    const { title, action, symbol, price } = req.body;
     
     if (!title || !action || !symbol || !price) {
       log('warn', 'Invalid webhook payload - missing required fields', req.body);
@@ -422,7 +422,6 @@ app.post('/webhook', async (req, res) => {
     // Prepare signal data - include all properties from request body
     const signalData = {
       title,
-      datetime: datetime || new Date().toISOString(),
       action: action.toUpperCase(),
       symbol,
       price,
@@ -430,7 +429,7 @@ app.post('/webhook', async (req, res) => {
       ...Object.keys(req.body).reduce((acc, key) => {
         const lowerKey = key.toLowerCase();
         // Exclude already processed keys and common webhook fields
-        if (!['title', 'datetime', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test'].includes(lowerKey)) {
+        if (!['title', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'time'].includes(lowerKey)) {
           acc[key] = req.body[key];
         }
         return acc;
@@ -446,7 +445,8 @@ app.post('/webhook', async (req, res) => {
       // Get chart image with basic options
       const chartOptions = {
         width: 800,
-        height: 600
+        height: 600,
+        time: req.body.time // Pass time parameter for chart URL selection
       };
 
       const chartResult = await chartService.getChartImage(formattedSymbol, chartOptions);

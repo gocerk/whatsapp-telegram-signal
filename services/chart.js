@@ -109,8 +109,13 @@ class ChartService {
       // Format symbol for TradingView URL
       const formattedSymbol = this.formatSymbol(symbol);
       
+      // Get base chart URL based on time parameter
+      const baseChartUrl = this.getChartUrlByTime(options.time);
+      
       // Build TradingView chart URL
-      const chartUrl = `https://tr.tradingview.com/chart/4atOlnQu?symbol=${encodeURIComponent(formattedSymbol)}`;
+      const chartUrl = `${baseChartUrl}?symbol=${encodeURIComponent(formattedSymbol)}`;
+      
+      log('info', `Using chart URL for time ${options.time || 'default'}: ${baseChartUrl}`);
       
       // Get or create browser instance (reused across requests)
       const browser = await this.getBrowser();
@@ -347,6 +352,24 @@ class ChartService {
 
     // Merge with any additional options
     return { ...chartOptions, ...options };
+  }
+
+  // Get chart URL based on time parameter
+  getChartUrlByTime(time) {
+    const timeUrls = {
+      '4H': 'https://tr.tradingview.com/chart/iIUr0LOx/',
+      '1H': 'https://tr.tradingview.com/chart/ASXc6cgm/',
+      '15M': 'https://tr.tradingview.com/chart/AC5BZQGQ/',
+      '5M': 'https://tr.tradingview.com/chart/PjfjQaTt/'
+    };
+
+    // Return specific URL if time is provided and valid, otherwise use default
+    if (time && timeUrls[time.toUpperCase()]) {
+      return timeUrls[time.toUpperCase()];
+    }
+
+    // Default chart URL (using 4H as default)
+    return 'https://tr.tradingview.com/chart/iIUr0LOx/';
   }
 
   // Format symbol for TradingView (ensure proper exchange:symbol format)
