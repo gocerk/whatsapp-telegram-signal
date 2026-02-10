@@ -203,7 +203,7 @@ class ChartService {
       await new Promise(r => setTimeout(r, 1000));
 
       // Take screenshot of chart area
-      const selector = 'body > div.js-rootresizer__contents > div';
+      const selector = 'body > div.js-rootresizer__contents > div > div.layout__area--center.unselectable > div.chart-container.single-visible.top-full-width-chart.active > div.chart-container-border > div > div.chart-markup-table > div:nth-child(1) > div.chart-markup-table.pane > div > canvas:nth-child(3)';
       const element = await page.$(selector);
       let screenshotBuffer;
       
