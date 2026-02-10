@@ -24,6 +24,30 @@ class WhatsAppService {
   }
 
   /**
+   * Check if current time is within restricted hours (00:00 - 06:00 Turkish time)
+   * @returns {boolean} True if within restricted hours, false otherwise
+   */
+  isWithinRestrictedHours() {
+    const now = new Date();
+    
+    // Get hour in Turkish time (Europe/Istanbul timezone)
+    const turkishTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' }));
+    const hour = turkishTime.getHours();
+    
+    // Check if hour is between 00:00 (0) and 06:00 (6) Turkish time
+    if (hour >= 0 && hour < 6) {
+      log('warn', 'Message sending blocked - within restricted hours (00:00 - 06:00 Turkish time)', {
+        currentHour: hour,
+        turkishTime: turkishTime.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' }),
+        utcTime: now.toISOString()
+      });
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
    * List all WhatsApp groups using Whapi API
    * @returns {Promise<Object>} Result object with groups array and count
    */
@@ -86,6 +110,11 @@ class WhatsAppService {
    */
   async sendMessageToPerson(phoneNumber, message) {
     try {
+      // Check if within restricted hours
+      if (this.isWithinRestrictedHours()) {
+        throw new Error('Message sending is not allowed between 00:00 and 06:00');
+      }
+
       if (!this.whapiToken) {
         throw new Error('WHAPI_TOKEN not configured');
       }
@@ -216,6 +245,11 @@ class WhatsAppService {
    */
   async sendImageToPerson(phoneNumber, imageUrl, caption = '') {
     try {
+      // Check if within restricted hours
+      if (this.isWithinRestrictedHours()) {
+        throw new Error('Message sending is not allowed between 00:00 and 06:00');
+      }
+
       if (!this.whapiToken) {
         throw new Error('WHAPI_TOKEN not configured');
       }

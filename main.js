@@ -54,7 +54,6 @@ app.use((req, res, next) => {
 const WHATSAPP_GROUP_ID = process.env.WHATSAPP_TO_NUMBERS;
 const WHATSAPP_GROUPS = process.env.WHATSAPP_GROUPS; // Comma-separated list of group IDs
 
-
 // Initialize MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
 if (MONGODB_URI) {
