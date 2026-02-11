@@ -16,6 +16,7 @@ async function testWebhookEndpoint() {
     msg: "test mesaji",
     symbol: "BINANCE:BTCUSD",
     test: "yes",
+    time: "15M",
   };
 
   console.log('📊 Testing webhook endpoint:', webhookUrl);

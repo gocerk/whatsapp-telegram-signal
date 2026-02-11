@@ -208,16 +208,16 @@ class WhatsAppService {
    * @returns {string} Formatted message text
    */
   formatTradingMessage(signal) {
-    const { title, datetime, action, symbol, price, ...otherProps } = signal;
+    const { title, action, symbol, price, ...otherProps } = signal;
     
     // Format price
     const formattedPrice = this.formatNumber(price);
     
     // Build main message with title, datetime, action, symbol, price
-    let message = `${title}\n${datetime || new Date().toISOString()}\n\n${action} ${symbol} ${formattedPrice}`;
+    let message = `${title}\n\n${action} ${symbol} ${formattedPrice}`;
     
     // Add all other properties as KEY: VALUE (preserve original order)
-    const excludedKeys = ['title', 'datetime', 'action', 'symbol', 'price'];
+    const excludedKeys = ['title', 'action', 'symbol', 'price'];
     const additionalProps = Object.keys(otherProps)
       .filter(key => !excludedKeys.includes(key.toLowerCase()) && otherProps[key] !== undefined && otherProps[key] !== null && otherProps[key] !== '');
     
