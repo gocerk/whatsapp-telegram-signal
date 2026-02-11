@@ -73,19 +73,18 @@ class TelegramService {
    * Same format as WhatsApp: title, datetime, action symbol price, then KEY: VALUE for other properties
    */
   formatTradingViewMessage(data) {
-    const { title, datetime, action, symbol, price, ...otherProps } = data;
+    const { title, action, symbol, price, ...otherProps } = data;
     
     const messageTitle = title || "Yeni Islem Onerisi";
-    const messageDatetime = datetime || new Date().toISOString();
     const messageAction = (action || data.side || "").toUpperCase();
     const messageSymbol = symbol || data.ticker || "";
     const messagePrice = this.formatNumber(price || data.close || "");
 
     // Build main message with title, datetime, action, symbol, price
-    let message = `${messageTitle}\n${messageDatetime}\n\n${messageAction} ${messageSymbol} ${messagePrice}`;
+    let message = `${messageTitle}\n\n${messageAction} ${messageSymbol} ${messagePrice}`;
     
     // Add all other properties as KEY: VALUE (preserve original order)
-    const excludedKeys = ['title', 'datetime', 'action', 'side', 'symbol', 'ticker', 'price', 'close'];
+    const excludedKeys = ['title', 'action', 'side', 'symbol', 'ticker', 'price', 'close'];
     const additionalProps = Object.keys(otherProps)
       .filter(key => !excludedKeys.includes(key.toLowerCase()) && otherProps[key] !== undefined && otherProps[key] !== null && otherProps[key] !== '');
     
@@ -108,7 +107,7 @@ class TelegramService {
    * Format trading message with emojis (alternative format)
    */
   formatTradingMessage(signal) {
-    const { title, datetime, action, symbol, price } = signal;
+    const { title, action, symbol, price } = signal;
     
     const actionEmoji = action === 'BUY' ? '🟢' : action === 'SELL' ? '🔴' : '⚪';
     
@@ -117,7 +116,6 @@ class TelegramService {
 📊 *Symbol:* ${symbol}
 ⚡ *Action:* ${action}
 💰 *Price:* $${price}
-🕐 *Time:* ${datetime}
 
 _Trading signal from TradingView_`;
   }
