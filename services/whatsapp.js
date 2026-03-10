@@ -15,7 +15,7 @@ class WhatsAppService {
     // Whapi API configuration
     this.whapiToken = process.env.WHAPI_TOKEN;
     this.whapiBaseUrl = process.env.WHAPI_BASE_URL || 'https://gate.whapi.cloud';
-    
+
     if (!this.whapiToken) {
       log('warn', 'WHAPI_TOKEN not set in environment variables');
     } else {
@@ -29,11 +29,11 @@ class WhatsAppService {
    */
   isWithinRestrictedHours() {
     const now = new Date();
-    
+
     // Get hour in Turkish time (Europe/Istanbul timezone)
     const turkishTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' }));
     const hour = turkishTime.getHours();
-    
+
     // Check if hour is between 00:00 (0) and 06:00 (6) Turkish time
     if (hour >= 0 && hour < 6) {
       log('warn', 'Message sending blocked - within restricted hours (00:00 - 06:00 Turkish time)', {
@@ -43,7 +43,7 @@ class WhatsAppService {
       });
       return true;
     }
-    
+
     return false;
   }
 
@@ -74,7 +74,7 @@ class WhatsAppService {
 
       if (response.status === 200 && response.data) {
         const groups = Array.isArray(response.data) ? response.data : [];
-        
+
         log('info', 'Groups retrieved successfully', {
           count: groups.length
         });
@@ -184,10 +184,10 @@ class WhatsAppService {
     if (value === null || value === undefined || value === '') {
       return value;
     }
-    
+
     // Convert to string first
     const strValue = String(value).trim();
-    
+
     // Check if it's a number (including decimals)
     const numMatch = strValue.match(/^-?\d+\.?\d*$/);
     if (numMatch) {
@@ -197,7 +197,7 @@ class WhatsAppService {
         return num.toFixed(maxDecimals).replace(/\.?0+$/, '');
       }
     }
-    
+
     // If not a number, return as is
     return strValue;
   }
@@ -209,18 +209,19 @@ class WhatsAppService {
    */
   formatTradingMessage(signal) {
     const { title, action, symbol, price, ...otherProps } = signal;
-    
+
     // Format price
     const formattedPrice = this.formatNumber(price);
-    
+
     // Build main message with title, datetime, action, symbol, price
-    let message = `${title}\n\n${action} ${symbol} ${formattedPrice}`;
-    
+    const messageTitle = title || "Yeni İşlem Önerisi";
+    let message = `${messageTitle}\n\n${action} ${symbol} ${formattedPrice}`;
+
     // Add all other properties as KEY: VALUE (preserve original order)
     const excludedKeys = ['title', 'action', 'symbol', 'price'];
     const additionalProps = Object.keys(otherProps)
       .filter(key => !excludedKeys.includes(key.toLowerCase()) && otherProps[key] !== undefined && otherProps[key] !== null && otherProps[key] !== '');
-    
+
     if (additionalProps.length > 0) {
       message += '\n';
       additionalProps.forEach(key => {
@@ -232,7 +233,7 @@ class WhatsAppService {
         message += `\n${formattedKey}: ${formattedValue}`;
       });
     }
-    
+
     return message;
   }
 
@@ -373,7 +374,7 @@ class WhatsAppService {
   async sendFormattedMessageToPerson(phoneNumbers, signalData, imageUrl = null) {
     try {
       const message = this.formatTradingMessage(signalData);
-      
+
       // Handle different input formats
       let numbersArray = [];
       if (Array.isArray(phoneNumbers)) {
@@ -425,7 +426,7 @@ class WhatsAppService {
           } else {
             result = await this.sendMessageToPerson(phoneNumber, message);
           }
-          
+
           results.succeeded++;
           results.results.push({
             phoneNumber: phoneNumber,
@@ -433,7 +434,7 @@ class WhatsAppService {
             messageId: result.messageId,
             response: result.response
           });
-          
+
           log('info', 'Message sent successfully to number', {
             phoneNumber: phoneNumber,
             messageId: result.messageId
@@ -445,7 +446,7 @@ class WhatsAppService {
             success: false,
             error: error.message
           });
-          
+
           log('error', 'Failed to send message to number', {
             phoneNumber: phoneNumber,
             error: error.message
@@ -480,12 +481,12 @@ class WhatsAppService {
     const requiredEnvVars = ['WHAPI_TOKEN'];
 
     const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-    
+
     if (missingVars.length > 0) {
       log('warn', 'Missing required environment variables', { missingVars });
       return false;
     }
-    
+
     log('info', 'Whapi WhatsApp configuration validated successfully');
     return true;
   }

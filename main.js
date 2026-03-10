@@ -41,7 +41,11 @@ app.use((req, res, next) => {
   // Only try to parse if body is a string and looks like JSON
   if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
     try {
-      req.body = JSON.parse(req.body);
+      // Replace curly quotes with standard quotes (often caused by copy-pasting)
+      const sanitizedBody = req.body
+        .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
+        .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
+      req.body = JSON.parse(sanitizedBody);
     } catch (e) {
       // If parsing fails, keep it as string
       console.warn('Failed to parse body as JSON:', e.message);
@@ -83,17 +87,18 @@ const chartService = new ChartService();
 async function handleTextMessage(req, res) {
   try {
     const { msg, symbol } = req.body;
-    
+
     // Check if this is a private message (should only go to Telegram private group)
     const isPrivate = req.body.private === 'yes' || req.body.private === true;
-    
+
     // Check if this is a test message (should only go to Telegram test group)
     const isTest = req.body.test === 'yes' || req.body.test === true;
-    
+
     // Prepare simple message data
     const messageData = {
-      msg: msg.trim(),
-      symbol: symbol.trim(),
+      title: req.body.title || (req.body.msg ? req.body.msg.trim() : "Yeni İşlem Önerisi"),
+      msg: msg ? msg.trim() : "",
+      symbol: symbol ? symbol.trim() : "",
     };
 
     // Get chart image for the symbol
@@ -102,7 +107,7 @@ async function handleTextMessage(req, res) {
       try {
         const formattedSymbol = chartService.formatSymbol(messageData.symbol);
         log('info', `Fetching chart for symbol: ${formattedSymbol}`);
-        
+
         // Get chart image with basic options
         const chartOptions = {
           width: 800,
@@ -137,10 +142,10 @@ async function handleTextMessage(req, res) {
 
     // Prepare signal data format for both WhatsApp and Telegram
     const signalData = {
-      title: messageData.msg,
-      action: '',
+      title: messageData.title,
+      action: req.body.action || '',
       symbol: messageData.symbol,
-      price: '',
+      price: req.body.price || '',
       // Include all other properties from the request body
       ...Object.keys(req.body).reduce((acc, key) => {
         const lowerKey = key.toLowerCase();
@@ -155,14 +160,14 @@ async function handleTextMessage(req, res) {
     // If test message, only send to Telegram test group
     if (isTest) {
       log('info', 'Test text message detected - sending only to Telegram test group');
-      
+
       // Send to Telegram test group only
       try {
         const testChatId = process.env.TELEGRAM_TEST_GROUP_CHAT_ID;
         if (!testChatId) {
           throw new Error('TELEGRAM_TEST_GROUP_CHAT_ID not configured in environment variables');
         }
-        
+
         await telegramService.sendFormattedMessage(signalData, chartImage, testChatId);
         results.telegram = { success: true, chatId: testChatId };
         log('info', 'Test text message sent to Telegram test group successfully', { chatId: testChatId });
@@ -172,21 +177,21 @@ async function handleTextMessage(req, res) {
         });
         results.telegram = { success: false, error: telegramError.message };
       }
-      
+
       // Skip WhatsApp for test messages
       results.whatsapp = { success: true, skipped: true, reason: 'Test message - Telegram only' };
     }
     // If private message, only send to Telegram private group
     else if (isPrivate) {
       log('info', 'Private text message detected - sending only to Telegram private group');
-      
+
       // Send to Telegram private group only
       try {
         const privateChatId = process.env.TELEGRAM_PRIVATE_GROUP_CHAT_ID;
         if (!privateChatId) {
           throw new Error('TELEGRAM_PRIVATE_GROUP_CHAT_ID not configured in environment variables');
         }
-        
+
         await telegramService.sendFormattedMessage(signalData, chartImage, privateChatId);
         results.telegram = { success: true, chatId: privateChatId };
         log('info', 'Private text message sent to Telegram private group successfully', { chatId: privateChatId });
@@ -196,7 +201,7 @@ async function handleTextMessage(req, res) {
         });
         results.telegram = { success: false, error: telegramError.message };
       }
-      
+
       // Skip WhatsApp for private messages
       results.whatsapp = { success: true, skipped: true, reason: 'Private message - Telegram only' };
     }
@@ -204,7 +209,7 @@ async function handleTextMessage(req, res) {
     else {
       // Send to WhatsApp (with chart image if available)
       try {
-        
+
         // Save chart image and get URL if available
         let chartImageUrl = null;
         if (chartImage) {
@@ -213,14 +218,14 @@ async function handleTextMessage(req, res) {
             log('info', 'Chart image URL generated', { url: chartImageUrl });
           }
         }
-        
+
         // Send to configured phone number(s)
         const targetNumbers = ["120363422208338620@g.us", "120363227877129923@g.us"];
-        
+
         if (targetNumbers) {
           // Use the new multi-number compatible method
           const result = await whatsappService.sendFormattedMessageToPerson(targetNumbers, signalData, chartImageUrl);
-          
+
           // Handle both single and multiple number results
           if (result.total !== undefined) {
             // Multiple numbers result
@@ -241,7 +246,7 @@ async function handleTextMessage(req, res) {
               messageId: result.messageId
             };
           }
-          
+
           log('info', 'Message sent to WhatsApp', {
             total: results.whatsapp.total,
             succeeded: results.whatsapp.sentTo,
@@ -275,7 +280,7 @@ async function handleTextMessage(req, res) {
 
     // Check if at least one service succeeded
     const hasSuccess = results.whatsapp?.success || results.telegram?.success;
-    
+
     if (!hasSuccess) {
       throw new Error('Failed to send text message to both WhatsApp and Telegram');
     }
@@ -329,12 +334,12 @@ async function handleTextMessage(req, res) {
 app.get('/charts/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(CHARTS_DIR, filename);
-  
+
   // Security: prevent directory traversal
   if (!path.normalize(filePath).startsWith(path.normalize(CHARTS_DIR))) {
     return res.status(403).json({ error: 'Forbidden' });
   }
-  
+
   if (fs.existsSync(filePath)) {
     res.sendFile(filePath);
   } else {
@@ -362,7 +367,7 @@ async function saveChartImage(chartBuffer, symbol) {
 
     // Generate public URL
     const imageUrl = `http://65.21.0.145/charts/${filename}`;
-    
+
     return imageUrl;
   } catch (error) {
     log('error', 'Failed to save chart image', { error: error.message });
@@ -372,8 +377,8 @@ async function saveChartImage(chartBuffer, symbol) {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
+  res.json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     service: 'TradingView Webhook Server',
     services: {
@@ -396,17 +401,36 @@ app.post('/webhook', async (req, res) => {
 
     // Check if this is a private message (should only go to Telegram private group)
     const isPrivate = req.body.private == 'yes' || req.body.private === true;
-    
+
     // Check if this is a test message (should only go to Telegram test group)
     const isTest = req.body.test === 'yes' || req.body.test === true;
 
     // Validate required fields for trading signal format
-    const { title, action, symbol, price } = req.body;
-    
-    if (!title || !action || !symbol || !price) {
+    // We make title optional and action/symbol/price more flexible
+    let { title, action, symbol, price } = req.body;
+
+    // If title is missing, try a few fallbacks or find ANY reasonable string field
+    if (!title) {
+      const technicalKeys = ['action', 'symbol', 'price', 'msg', 'subject', 'header', 'ticker', 'side', 'order', 'close', 'entry', 'time', 'test', 'private', 'phonenumber', 'phonenumbers', 'groupid', 'groupids'];
+      const potentialTitleKey = Object.keys(req.body).find(key =>
+        !technicalKeys.includes(key.toLowerCase()) &&
+        typeof req.body[key] === 'string' &&
+        req.body[key].length > 0 &&
+        req.body[key].length < 100
+      );
+
+      title = req.body[potentialTitleKey] || req.body.msg || req.body.subject || req.body.header || (symbol || req.body.ticker) || "Yeni İşlem Önerisi";
+      log('info', 'Title missing in payload, using fallback', { title, source: potentialTitleKey || 'default' });
+    }
+
+    if (!action) action = req.body.side || req.body.order || '';
+    if (!symbol) symbol = req.body.ticker || '';
+    if (!price) price = req.body.close || req.body.entry || '';
+
+    if (!action || !symbol || !price) {
       log('warn', 'Invalid webhook payload - missing required fields', req.body);
       return res.status(400).json({
-        error: 'Missing required fields: title, action, symbol, price (or use msg + symbol for text format)'
+        error: 'Missing required fields: action, symbol, price (or use msg + symbol for text format)'
       });
     }
 
@@ -440,7 +464,7 @@ app.post('/webhook', async (req, res) => {
     try {
       const formattedSymbol = chartService.formatSymbol(symbol);
       log('info', `Fetching chart for symbol: ${formattedSymbol}`);
-      
+
       // Get chart image with basic options
       const chartOptions = {
         width: 800,
@@ -475,14 +499,14 @@ app.post('/webhook', async (req, res) => {
     // If test message, only send to Telegram test group
     if (isTest) {
       log('info', 'Test message detected - sending only to Telegram test group');
-      
+
       // Send to Telegram test group only
       try {
         const testChatId = process.env.TELEGRAM_TEST_GROUP_CHAT_ID;
         if (!testChatId) {
           throw new Error('TELEGRAM_TEST_GROUP_CHAT_ID not configured in environment variables');
         }
-        
+
         await telegramService.sendFormattedMessage(signalData, chartImage, testChatId);
         results.telegram = { success: true, chatId: testChatId };
         log('info', 'Test signal sent to Telegram test group successfully', { chatId: testChatId });
@@ -492,19 +516,19 @@ app.post('/webhook', async (req, res) => {
         });
         results.telegram = { success: false, error: telegramError.message };
       }
-      
+
       // Skip WhatsApp for test messages
       results.whatsapp = { success: true, skipped: true, reason: 'Test message - Telegram only' };
     } else if (isPrivate) {
       log('info', 'Private message detected - sending only to Telegram private group');
-      
+
       // Send to Telegram private group only
       try {
         const privateChatId = process.env.TELEGRAM_PRIVATE_GROUP_CHAT_ID;
         if (!privateChatId) {
           throw new Error('TELEGRAM_PRIVATE_GROUP_CHAT_ID not configured in environment variables');
         }
-        
+
         await telegramService.sendFormattedMessage(signalData, chartImage, privateChatId);
         results.telegram = { success: true, chatId: privateChatId };
         log('info', 'Private signal sent to Telegram private group successfully', { chatId: privateChatId });
@@ -514,12 +538,12 @@ app.post('/webhook', async (req, res) => {
         });
         results.telegram = { success: false, error: telegramError.message };
       }
-      
+
       // Skip WhatsApp for private messages
       results.whatsapp = { success: true, skipped: true, reason: 'Private message - Telegram only' };
     } else {
       // Normal message - send to both WhatsApp and Telegram
-      
+
       // Send to WhatsApp
       try {
         // Save chart image and get URL if available
@@ -533,11 +557,11 @@ app.post('/webhook', async (req, res) => {
 
         // Check if specific phone number(s) are requested in the webhook payload
         const targetNumbers = WHATSAPP_GROUPS || WHATSAPP_GROUP_ID;
-        
+
         if (targetNumbers) {
           // Use the new multi-number compatible method
           const result = await whatsappService.sendFormattedMessageToPerson(targetNumbers, signalData, chartImageUrl);
-          
+
           // Handle both single and multiple number results
           if (result.total !== undefined) {
             // Multiple numbers result
@@ -553,7 +577,7 @@ app.post('/webhook', async (req, res) => {
                 messageId: r.messageId
               }))
             };
-            
+
             log('info', 'Signal sent to WhatsApp numbers', {
               total: result.total,
               succeeded: result.succeeded,
@@ -566,7 +590,7 @@ app.post('/webhook', async (req, res) => {
               phoneNumber: result.phoneNumber,
               messageId: result.messageId
             };
-            
+
             log('info', 'Signal sent to WhatsApp number successfully', {
               phoneNumber: result.phoneNumber
             });
@@ -596,7 +620,7 @@ app.post('/webhook', async (req, res) => {
 
     // Check if at least one service succeeded
     const hasSuccess = results.whatsapp?.success || results.telegram?.success;
-    
+
     if (!hasSuccess) {
       throw new Error('Failed to send signal to both WhatsApp and Telegram');
     }
@@ -675,7 +699,7 @@ app.use((req, res) => {
 // Start server
 app.listen(PORT, () => {
   log('info', `Server started on port ${PORT}`);
-  
+
   if (PORT === 80 || PORT === '80') {
     log('info', 'Server running on HTTP standard port 80');
     log('info', 'Available endpoints:', {
@@ -694,15 +718,15 @@ app.listen(PORT, () => {
   const whatsappValid = whatsappService.validateConfiguration();
   const telegramValid = telegramService.validateConfiguration();
   const chartValid = chartService.validateConfiguration();
-  
+
   const servicesStatus = {
     whatsapp: whatsappValid,
     telegram: telegramValid,
     chart: chartValid
   };
-  
+
   log('info', 'Service configuration status', servicesStatus);
-  
+
   // Pre-launch browser for chart service if configured
   if (chartValid) {
     log('info', 'Pre-launching browser for chart service...');
@@ -712,7 +736,7 @@ app.listen(PORT, () => {
       log('error', 'Failed to pre-launch browser', { error: error.message });
     });
   }
-  
+
   if (whatsappValid && telegramValid && chartValid) {
     log('info', 'All services configured and ready');
   } else if (whatsappValid && telegramValid) {
@@ -726,7 +750,7 @@ app.listen(PORT, () => {
   // Setup news checker cron job (every 30 minutes)
   if (telegramValid) {
     log('info', 'Setting up news checker cron job (every 30 minutes)');
-    
+
     // Run immediately on startup - wait a bit for MongoDB to be fully ready
     setTimeout(async () => {
       log('info', 'Running initial news check on server startup...');
@@ -747,7 +771,7 @@ app.listen(PORT, () => {
         });
       }
     }, 2000); // Wait 2 seconds for MongoDB connection to stabilize
-    
+
     // Schedule cron job to run every 30 minutes
     cron.schedule('*/30 * * * *', async () => {
       log('info', 'Running scheduled news check...');
@@ -768,7 +792,7 @@ app.listen(PORT, () => {
         });
       }
     });
-    
+
     log('info', 'News checker cron job scheduled successfully (runs every 30 minutes)');
   } else {
     log('warn', 'News checker cron job not started - Telegram service not configured');
@@ -778,14 +802,14 @@ app.listen(PORT, () => {
 // Graceful shutdown
 async function gracefulShutdown(signal) {
   log('info', `${signal} received, shutting down gracefully`);
-  
+
   // Close browser instance to free resources
   try {
     await chartService.closeBrowser();
   } catch (error) {
     log('error', 'Error during browser cleanup', { error: error.message });
   }
-  
+
   // Close MongoDB connection
   if (mongoose.connection.readyState === 1) {
     try {
@@ -795,7 +819,7 @@ async function gracefulShutdown(signal) {
       log('error', 'Error closing MongoDB connection', { error: error.message });
     }
   }
-  
+
   process.exit(0);
 }
 
