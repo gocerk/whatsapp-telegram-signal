@@ -8,7 +8,7 @@ async function testWebhookEndpoint() {
 
   // Configuration
   const PORT = process.env.PORT || 80;
-  const baseUrl = `http://65.21.0.145:${PORT}`;
+  const baseUrl = `http://46.225.167.233:${PORT}`;
   const webhookUrl = `${baseUrl}/webhook`;
 
   // Sample trading signal data
@@ -46,7 +46,7 @@ async function testWebhookEndpoint() {
 
   } catch (error) {
     console.log('❌ Webhook request failed!');
-    
+
     if (error.response) {
       console.log('📈 Response status:', error.response.status);
       console.log('📋 Response data:', JSON.stringify(error.response.data, null, 2));
