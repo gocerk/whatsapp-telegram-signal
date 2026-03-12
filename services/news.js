@@ -18,14 +18,29 @@ const getToken = async () => {
     }
 
     // Fetch new token
-    const response = await axios.get(TOKEN_URL);
+    const response = await axios.get(TOKEN_URL, {
+      headers: {
+        // Gerçek bir tarayıcı User-Agent'ı kullan
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': 'https://www.foreks.com/',
+        'Origin': 'https://www.foreks.com',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    });
+
     const { token, expire } = response.data;
-    
+
+    console.log(token);
+
     cachedToken = token;
     tokenExpiry = expire;
-    
+
     return token;
   } catch (error) {
+    console.log(error);
     console.error('Error fetching token:', error.message);
     throw new Error('Failed to get authentication token');
   }
@@ -39,7 +54,7 @@ const fetchLatestNews = async (locale = 'tr', tag = 'CURRENCY', last = 4) => {
     }
 
     const token = await getToken();
-    
+
     const response = await axios.get(NEWS_API_URL, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -82,7 +97,7 @@ const fetchNewsByTag = async (tag, locale = 'tr', last = 4) => {
 const fetchAllTagsNews = async (locale = 'tr', last = 4) => {
   try {
     const allNews = {};
-    
+
     for (const tag of AVAILABLE_TAGS) {
       try {
         allNews[tag] = await fetchLatestNews(locale, tag, last);
@@ -91,7 +106,7 @@ const fetchAllTagsNews = async (locale = 'tr', last = 4) => {
         allNews[tag] = [];
       }
     }
-    
+
     return allNews;
   } catch (error) {
     console.error('Error fetching all tags news:', error.message);
@@ -102,11 +117,11 @@ const fetchAllTagsNews = async (locale = 'tr', last = 4) => {
 const getNewsByTags = async (tags = [], locale = 'tr', limit = 10) => {
   try {
     const query = {};
-    
+
     if (tags.length > 0) {
       query.tag = { $in: tags };
     }
-    
+
     if (locale) {
       query.locale = locale;
     }
