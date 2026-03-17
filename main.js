@@ -150,7 +150,7 @@ async function handleTextMessage(req, res) {
       ...Object.keys(req.body).reduce((acc, key) => {
         const lowerKey = key.toLowerCase();
         // Exclude already processed keys
-        if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'time'].includes(lowerKey)) {
+        if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'time', 'whatsapp', 'telegram', 'signal'].includes(lowerKey)) {
           acc[key] = req.body[key];
         }
         return acc;
@@ -423,7 +423,7 @@ app.post('/webhook', async (req, res) => {
       log('info', 'Title missing in payload, using fallback', { title, source: potentialTitleKey || 'default' });
     }
 
-    if (!action) action = req.body.side || req.body.order || '';
+    if (!action) action = req.body.signal || req.body.side || req.body.order || '';
     if (!symbol) symbol = req.body.ticker || '';
     if (!price) price = req.body.close || req.body.entry || '';
 
@@ -452,7 +452,7 @@ app.post('/webhook', async (req, res) => {
       ...Object.keys(req.body).reduce((acc, key) => {
         const lowerKey = key.toLowerCase();
         // Exclude already processed keys and common webhook fields
-        if (!['title', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'time'].includes(lowerKey)) {
+        if (!['title', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'time', 'whatsapp', 'telegram', 'signal'].includes(lowerKey)) {
           acc[key] = req.body[key];
         }
         return acc;

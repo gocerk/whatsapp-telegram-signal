@@ -84,7 +84,7 @@ class TelegramService {
     let message = `${messageTitle}\n\n${messageAction} ${messageSymbol} ${messagePrice}`;
     
     // Add all other properties as KEY: VALUE (preserve original order)
-    const excludedKeys = ['title', 'action', 'side', 'symbol', 'ticker', 'price', 'close'];
+    const excludedKeys = ['title', 'action', 'side', 'symbol', 'ticker', 'price', 'close', 'signal', 'entry', 'whatsapp', 'telegram', 'test', 'private', 'time'];
     const additionalProps = Object.keys(otherProps)
       .filter(key => !excludedKeys.includes(key.toLowerCase()) && otherProps[key] !== undefined && otherProps[key] !== null && otherProps[key] !== '');
     

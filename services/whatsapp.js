@@ -218,7 +218,7 @@ class WhatsAppService {
     let message = `${messageTitle}\n\n${action} ${symbol} ${formattedPrice}`;
 
     // Add all other properties as KEY: VALUE (preserve original order)
-    const excludedKeys = ['title', 'action', 'symbol', 'price'];
+    const excludedKeys = ['title', 'action', 'symbol', 'price', 'side', 'ticker', 'close', 'signal', 'entry', 'whatsapp', 'telegram', 'test', 'private', 'time'];
     const additionalProps = Object.keys(otherProps)
       .filter(key => !excludedKeys.includes(key.toLowerCase()) && otherProps[key] !== undefined && otherProps[key] !== null && otherProps[key] !== '');
 
