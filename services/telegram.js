@@ -46,7 +46,7 @@ class TelegramService {
    * @param {number} maxDecimals - Maximum number of decimal places (default: 4)
    * @returns {string} Formatted value
    */
-  formatNumber(value, maxDecimals = 4) {
+  formatNumber(value, maxDecimals = 2) {
     if (value === null || value === undefined || value === '') {
       return value;
     }

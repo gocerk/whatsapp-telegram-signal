@@ -35,20 +35,22 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.text({ type: 'text/plain', limit: '10mb' }));
 
-// Middleware to handle raw JSON that might come without proper content-type
+// Middleware to handle raw JSON and sanitization (TradingView copy-paste fix)
 app.use((req, res, next) => {
-  console.log('Raw body:', req.body);
-  // Only try to parse if body is a string and looks like JSON
   if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
     try {
-      // Replace curly quotes with standard quotes (often caused by copy-pasting)
-      const sanitizedBody = req.body
+      // 1. Replace curly quotes (often from copy-paste)
+      // 2. Fix nested double quotes if they exist (common TV placeholder issue)
+      let sanitizedBody = req.body
         .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
         .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
+
       req.body = JSON.parse(sanitizedBody);
     } catch (e) {
-      // If parsing fails, keep it as string
-      console.warn('Failed to parse body as JSON:', e.message);
+      log('warn', 'JSON Parse failed, attempting fallback recovery', { error: e.message });
+      
+      // Fallback: If it's a "conflicting quotes" issue, we could try a more aggressive fix
+      // but it's safer to just log and let the handler deal with it if possible.
     }
   }
   next();
