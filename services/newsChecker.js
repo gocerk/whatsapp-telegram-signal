@@ -13,6 +13,26 @@ const log = (level, message, data = null) => {
   }
 };
 
+// Rate limiting: keep total daily news volume between ~5-15 spread across the day.
+// MAX_NEWS_PER_RUN caps a single check; MAX_NEWS_PER_DAY caps the calendar day.
+const MAX_NEWS_PER_RUN = parseInt(process.env.MAX_NEWS_PER_RUN, 10) || 2;
+const MAX_NEWS_PER_DAY = parseInt(process.env.MAX_NEWS_PER_DAY, 10) || 15;
+
+/**
+ * Count how many news items were already sent today (local calendar day).
+ */
+async function countNewsSentToday() {
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    return await SentNews.countDocuments({ sentAt: { $gte: startOfDay } });
+  } catch (error) {
+    log('error', 'Error counting news sent today', { error: error.message });
+    // On error, assume the cap is reached to avoid flooding
+    return MAX_NEWS_PER_DAY;
+  }
+}
+
 /**
  * Check if news was already sent
  */
@@ -118,8 +138,24 @@ async function checkAndSendNewNews() {
     // Fetch latest news for all available tags
     const allTags = newsService.AVAILABLE_TAGS;
     let newNewsCount = 0;
-    
+
+    // Respect the daily cap before doing any work
+    const alreadySentToday = await countNewsSentToday();
+    let remainingToday = MAX_NEWS_PER_DAY - alreadySentToday;
+    // Per-run cap is the smaller of the run limit and what's left for today
+    let remainingThisRun = Math.min(MAX_NEWS_PER_RUN, remainingToday);
+
+    if (remainingThisRun <= 0) {
+      log('info', 'Daily/per-run news cap reached, skipping this check', {
+        alreadySentToday,
+        maxPerDay: MAX_NEWS_PER_DAY,
+        maxPerRun: MAX_NEWS_PER_RUN
+      });
+      return { success: true, newNewsCount: 0, totalChecked: allTags.length, capReached: true };
+    }
+
     for (const tag of allTags) {
+      if (remainingThisRun <= 0) break;
       try {
         log('info', `Fetching news for tag: ${tag}`);
         const newsItems = await newsService.fetchLatestNews('tr', tag, 10);
@@ -176,17 +212,19 @@ async function checkAndSendNewNews() {
           continue;
         }
         
-        log('info', `Found ${newNews.length} new news items for tag: ${tag}`);
-        
+        // Only send up to what's left in this run's budget
+        const newsToSend = newNews.slice(0, remainingThisRun);
+        log('info', `Found ${newNews.length} new news items for tag: ${tag}, sending ${newsToSend.length} (budget left: ${remainingThisRun})`);
+
         // Send each new news item to Telegram and WhatsApp
         const telegramService = new TelegramService();
         const whatsappService = new WhatsAppService();
         // Additional Telegram group ID from environment variable (optional)
-        const additionalGroupId = process.env.TELEGRAM_ADDITIONAL_CHAT_ID || '-1003148217444';
+        const additionalGroupId = process.env.TELEGRAM_ADDITIONAL_CHAT_ID;
         // WhatsApp phone number for news (different from default)
         const whatsappNewsPhoneNumber = process.env.WHATSAPP_NEWS_PHONE_NUMBER;
         
-        for (const newsItem of newNews) {
+        for (const newsItem of newsToSend) {
           try {
             const newsId = newsItem._id || newsItem.id;
             const formattedTelegramMessage = formatNewsForTelegram(newsItem);
@@ -248,15 +286,19 @@ async function checkAndSendNewNews() {
             // Mark as sent in MongoDB (only if at least one send succeeded)
             await markNewsAsSent(newsItem);
             newNewsCount++;
-            
+            remainingThisRun--;
+
             log('info', `News processed successfully`, {
               newsId,
               header: newsItem.header?.substring(0, 50)
             });
-            
+
+            // Stop once this run's budget is exhausted
+            if (remainingThisRun <= 0) break;
+
             // Small delay between messages to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
           } catch (error) {
             log('error', `Failed to process news`, {
               newsId: newsItem._id || newsItem.id,

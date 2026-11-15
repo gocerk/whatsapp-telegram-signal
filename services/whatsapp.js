@@ -1,4 +1,4 @@
-const axios = require('axios');
+const whatsappClient = require('./whatsappClient');
 
 // Logging utility
 const log = (level, message, data = null) => {
@@ -9,18 +9,49 @@ const log = (level, message, data = null) => {
   }
 };
 
-// WhatsApp service using Whapi API
+// Delay between messages when sending to multiple chats (reduces ban risk)
+const MULTI_SEND_DELAY_MS = parseInt(process.env.WHATSAPP_SEND_DELAY_MS || '1500', 10);
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// WhatsApp service using Baileys (linked device, WhatsApp Web protocol)
 class WhatsAppService {
   constructor() {
-    // Whapi API configuration
-    this.whapiToken = process.env.WHAPI_TOKEN;
-    this.whapiBaseUrl = process.env.WHAPI_BASE_URL || 'https://gate.whapi.cloud';
+    // Shared connection: safe to create many WhatsAppService instances
+    whatsappClient.connect();
+  }
 
-    if (!this.whapiToken) {
-      log('warn', 'WHAPI_TOKEN not set in environment variables');
-    } else {
-      log('info', 'Whapi API configured successfully');
+  /**
+   * Convert phone number or group id to a WhatsApp JID
+   * - "905xxxxxxxxx" / "+90 5xx xxx xx xx" -> "905xxxxxxxxx@s.whatsapp.net"
+   * - "1203634...@g.us" (group) / any value containing "@" -> kept as is
+   */
+  toJid(phoneNumber) {
+    if (typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
+      throw new Error('phoneNumber is required');
     }
+
+    const value = phoneNumber.trim();
+    if (value.includes('@')) {
+      return value;
+    }
+
+    // Strip invisible LTR/RTL marks from copy-pasted numbers, then keep digits only
+    const digitsOnly = value
+      .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
+      .replace(/\D/g, '');
+
+    if (!/^\d{9,15}$/.test(digitsOnly)) {
+      throw new Error(`Invalid phone number format for WhatsApp: "${digitsOnly}" from input "${phoneNumber}"`);
+    }
+
+    return `${digitsOnly}@s.whatsapp.net`;
+  }
+
+  /**
+   * Connection status (for health checks)
+   */
+  getStatus() {
+    return whatsappClient.getStatus();
   }
 
   /**
@@ -48,50 +79,30 @@ class WhatsAppService {
   }
 
   /**
-   * List all WhatsApp groups using Whapi API
+   * List all WhatsApp groups the linked account is a member of
    * @returns {Promise<Object>} Result object with groups array and count
    */
   async listGroups() {
     try {
-      if (!this.whapiToken) {
-        throw new Error('WHAPI_TOKEN not configured');
-      }
+      await whatsappClient.getSocket();
+      log('info', 'Fetching WhatsApp groups');
 
-      const url = `${this.whapiBaseUrl}/groups`;
-      const headers = {
-        'accept': 'application/json',
-        'Authorization': `Bearer ${this.whapiToken}`
+      const groupsById = await whatsappClient.refreshGroupCache();
+      const groups = Object.values(groupsById).map(group => ({
+        id: group.id,
+        name: group.subject,
+        participants: group.participants?.length || 0
+      }));
+
+      log('info', 'Groups retrieved successfully', { count: groups.length });
+
+      return {
+        success: true,
+        groups: groups,
+        count: groups.length
       };
-
-      log('info', 'Fetching WhatsApp groups from Whapi API');
-
-      const response = await axios.get(url, {
-        headers: headers,
-        params: {
-          token: this.whapiToken
-        }
-      });
-
-      if (response.status === 200 && response.data) {
-        const groups = Array.isArray(response.data) ? response.data : [];
-
-        log('info', 'Groups retrieved successfully', {
-          count: groups.length
-        });
-
-        return {
-          success: true,
-          groups: groups,
-          count: groups.length
-        };
-      } else {
-        throw new Error('Unexpected response format from Whapi API');
-      }
     } catch (error) {
-      log('error', 'Failed to retrieve groups from Whapi API', {
-        error: error.message,
-        response: error.response?.data
-      });
+      log('error', 'Failed to retrieve WhatsApp groups', { error: error.message });
 
       return {
         success: false,
@@ -103,8 +114,8 @@ class WhatsAppService {
   }
 
   /**
-   * Send a message to a specific person using Whapi API
-   * @param {string} phoneNumber - Phone number in international format without + (e.g., '15056482143')
+   * Send a text message to a person or group
+   * @param {string} phoneNumber - Phone number in international format (e.g., '905xxxxxxxxx') or group id ('...@g.us')
    * @param {string} message - Message text to send
    * @returns {Promise<Object>} Result object with success status and message details
    */
@@ -115,60 +126,28 @@ class WhatsAppService {
         throw new Error('Message sending is not allowed between 00:00 and 06:00');
       }
 
-      if (!this.whapiToken) {
-        throw new Error('WHAPI_TOKEN not configured');
-      }
-
       if (!phoneNumber || !message) {
         throw new Error('phoneNumber and message are required');
       }
 
-      // Remove + and any spaces from phone number
-      const cleanPhoneNumber = phoneNumber.replace(/[\s+]/g, '');
+      const jid = this.toJid(phoneNumber);
+      const sock = await whatsappClient.getSocket();
 
-      const url = `${this.whapiBaseUrl}/messages/text`;
-      const headers = {
-        'accept': 'application/json',
-        'content-type': 'application/json',
-        'Authorization': `Bearer ${this.whapiToken}`
+      log('info', 'Sending message via WhatsApp', { to: jid });
+
+      const sent = await sock.sendMessage(jid, { text: message });
+
+      log('info', 'Message sent successfully', { to: jid, messageId: sent?.key?.id });
+
+      return {
+        success: true,
+        phoneNumber: jid,
+        messageId: sent?.key?.id
       };
-
-      const data = {
-        to: cleanPhoneNumber,
-        body: message
-      };
-
-      log('info', 'Sending message to person via Whapi API', {
-        phoneNumber: cleanPhoneNumber
-      });
-
-      const response = await axios.post(url, data, {
-        headers: headers,
-        params: {
-          token: this.whapiToken
-        }
-      });
-
-      if (response.status === 200) {
-        log('info', 'Message sent successfully', {
-          phoneNumber: cleanPhoneNumber,
-          response: response.data
-        });
-
-        return {
-          success: true,
-          phoneNumber: cleanPhoneNumber,
-          messageId: response.data?.id || response.data?.message_id,
-          response: response.data
-        };
-      } else {
-        throw new Error(`Unexpected status code: ${response.status}`);
-      }
     } catch (error) {
-      log('error', 'Failed to send message via Whapi API', {
+      log('error', 'Failed to send WhatsApp message', {
         error: error.message,
-        phoneNumber: phoneNumber,
-        response: error.response?.data
+        phoneNumber: phoneNumber
       });
       throw error;
     }
@@ -238,124 +217,48 @@ class WhatsAppService {
   }
 
   /**
-   * Send an image with caption to a specific person using Whapi API
-   * @param {string} phoneNumber - Phone number in international format without + (e.g., '15056482143')
-   * @param {string} imageUrl - Public URL of the image
+   * Send an image with caption to a person or group
+   * @param {string} phoneNumber - Phone number in international format (e.g., '905xxxxxxxxx') or group id ('...@g.us')
+   * @param {string|Buffer} image - Public URL / local file path of the image, or image Buffer
    * @param {string} caption - Caption text for the image
    * @returns {Promise<Object>} Result object with success status and message details
    */
-  async sendImageToPerson(phoneNumber, imageUrl, caption = '') {
+  async sendImageToPerson(phoneNumber, image, caption = '') {
     try {
       // Check if within restricted hours
       if (this.isWithinRestrictedHours()) {
         throw new Error('Message sending is not allowed between 00:00 and 06:00');
       }
 
-      if (!this.whapiToken) {
-        throw new Error('WHAPI_TOKEN not configured');
+      if (!phoneNumber || !image) {
+        throw new Error('phoneNumber and image are required');
       }
 
-      if (!phoneNumber || !imageUrl) {
-        throw new Error('phoneNumber and imageUrl are required');
-      }
+      const jid = this.toJid(phoneNumber);
+      const sock = await whatsappClient.getSocket();
 
-      let cleanPhoneNumber = phoneNumber;
+      log('info', 'Sending image via WhatsApp', {
+        to: jid,
+        image: Buffer.isBuffer(image) ? `<buffer ${image.length} bytes>` : image
+      });
 
-      // Check if this is a group number
-      const isGroup = typeof cleanPhoneNumber === 'string' && cleanPhoneNumber.includes('@g.us');
-
-      if (!isGroup) {
-        // Whapi expects phone number: remove +, spaces, and any non-digit or hyphen at start/end
-        cleanPhoneNumber = cleanPhoneNumber
-          .replace(/[^\d\-@.]/g, '') // remove ALL non-digit, non-hyphen, non-@, non-dot
-          .replace(/^[-\s]+|[-\s]+$/g, '') // trim - and spaces from start/end
-          .replace(/-/g, ''); // remove all dashes
-
-        // Some "copy-paste" numbers from WhatsApp Web contain invisible LTR/RTL marks or strange chars
-        cleanPhoneNumber = cleanPhoneNumber.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
-
-        // Remove @... if present
-        const digitsOnly = cleanPhoneNumber.replace(/@.*/, '');
-        // Must be only digits and length 9-31
-        if (!/^\d{9,31}$/.test(digitsOnly)) {
-          throw new Error(
-            `Invalid phone number format for WhatsApp API: "${digitsOnly}" from input "${phoneNumber}"`
-          );
-        }
-        cleanPhoneNumber = digitsOnly;
-      }
-      // else: leave group phone number completely as is, no further cleaning
-
-      const url = `${this.whapiBaseUrl}/messages/image`;
-      const headers = {
-        'accept': 'application/json',
-        'content-type': 'application/json',
-        'Authorization': `Bearer ${this.whapiToken}`
-      };
-
-      const data = {
-        to: cleanPhoneNumber,
-        media: imageUrl,
+      const sent = await sock.sendMessage(jid, {
+        image: Buffer.isBuffer(image) ? image : { url: image },
         caption: caption || ''
+      });
+
+      log('info', 'Image sent successfully', { to: jid, messageId: sent?.key?.id });
+
+      return {
+        success: true,
+        phoneNumber: jid,
+        messageId: sent?.key?.id
       };
-
-      log('info', 'Sending image to person via Whapi API', {
-        phoneNumber: phoneNumber,
-        cleaned: cleanPhoneNumber,
-        imageUrl: imageUrl
-      });
-
-      const response = await axios.post(url, data, {
-        headers: headers,
-        params: {
-          token: this.whapiToken
-        }
-      });
-
-      if (response.status === 200) {
-        log('info', 'Image sent successfully', {
-          phoneNumber: cleanPhoneNumber,
-          response: response.data
-        });
-
-        return {
-          success: true,
-          phoneNumber: cleanPhoneNumber,
-          messageId: response.data?.id || response.data?.message_id,
-          response: response.data
-        };
-      } else {
-        throw new Error(`Unexpected status code: ${response.status}`);
-      }
     } catch (error) {
-      // Enhance error log if 400 from server with pattern error
-      let hint;
-      let details;
-      if (
-        error.response &&
-        error.response.status === 400 &&
-        error.response.data &&
-        error.response.data.error &&
-        typeof error.response.data.error.details === 'string'
-      ) {
-        details = error.response.data.error.details;
-        hint = '';
-        if (
-          /must match pattern/.test(details) &&
-          /to must match pattern/.test(details)
-        ) {
-          hint =
-            '\n⚠️ Looks like the WhatsApp number format is invalid. ' +
-            'Make sure phone number contains ONLY digits, no spaces or symbols. For example: 15551234567';
-        }
-      }
-
-      log('error', 'Failed to send image via Whapi API', {
-        error: error.message + (hint ? hint : ''),
+      log('error', 'Failed to send WhatsApp image', {
+        error: error.message,
         phoneNumber: phoneNumber,
-        imageUrl: imageUrl,
-        response: error.response?.data,
-        details
+        image: Buffer.isBuffer(image) ? '<buffer>' : image
       });
       throw error;
     }
@@ -418,7 +321,10 @@ class WhatsAppService {
         results: []
       };
 
-      for (const phoneNumber of numbersArray) {
+      for (const [index, phoneNumber] of numbersArray.entries()) {
+        if (index > 0 && MULTI_SEND_DELAY_MS > 0) {
+          await sleep(MULTI_SEND_DELAY_MS);
+        }
         try {
           let result;
           if (imageUrl) {
@@ -431,8 +337,7 @@ class WhatsAppService {
           results.results.push({
             phoneNumber: phoneNumber,
             success: true,
-            messageId: result.messageId,
-            response: result.response
+            messageId: result.messageId
           });
 
           log('info', 'Message sent successfully to number', {
@@ -477,17 +382,19 @@ class WhatsAppService {
     }
   }
 
+  /**
+   * Baileys needs no API keys; the service is usable once the device is linked.
+   * Returns true when configured (a session exists or linking is in progress).
+   */
   validateConfiguration() {
-    const requiredEnvVars = ['WHAPI_TOKEN'];
+    const status = whatsappClient.getStatus();
 
-    const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-    if (missingVars.length > 0) {
-      log('warn', 'Missing required environment variables', { missingVars });
+    if (status.status === 'logged_out') {
+      log('warn', 'WhatsApp session logged out, link the device again (npm run wa:login)');
       return false;
     }
 
-    log('info', 'Whapi WhatsApp configuration validated successfully');
+    log('info', 'Baileys WhatsApp configuration validated', { status: status.status });
     return true;
   }
 }

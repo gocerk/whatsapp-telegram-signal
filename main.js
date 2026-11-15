@@ -85,16 +85,38 @@ const whatsappService = new WhatsAppService();
 const telegramService = new TelegramService();
 const chartService = new ChartService();
 
+// Delivery targets selected by the "gonderim" (or "gönderim") field.
+// "vip"    -> Telegram VIP group (+ WhatsApp)
+// "analiz" -> Telegram analiz group only
+// "vipislem" -> Telegram VIP işlem group only
+// "test"   -> Telegram test group only
+// missing / anything else -> treated as "test" (safe default)
+const DELIVERY_TARGETS = {
+  vip: { envKey: 'TELEGRAM_VIP_CHAT_ID', sendWhatsApp: true },
+  analiz: { envKey: 'TELEGRAM_ANALIZ_CHAT_ID', sendWhatsApp: false },
+  vipislem: { envKey: 'TELEGRAM_VIPISLEM_CHAT_ID', defaultChatId: '-1003670454613', sendWhatsApp: false },
+  test: { envKey: 'TELEGRAM_TEST_GROUP_CHAT_ID', sendWhatsApp: false }
+};
+
+function resolveDelivery(body) {
+  const value = String(body.gonderim || body['gönderim'] || '').trim().toLowerCase();
+  const mode = Object.hasOwn(DELIVERY_TARGETS, value) ? value : 'test';
+  const target = DELIVERY_TARGETS[mode];
+  return {
+    mode,
+    envKey: target.envKey,
+    sendWhatsApp: target.sendWhatsApp,
+    telegramChatId: process.env[target.envKey] || target.defaultChatId
+  };
+}
+
 // Handle simple text message format
 async function handleTextMessage(req, res) {
   try {
     const { msg, symbol } = req.body;
 
-    // Check if this is a private message (should only go to Telegram private group)
-    const isPrivate = req.body.private === 'yes' || req.body.private === true;
-
-    // Check if this is a test message (should only go to Telegram test group)
-    const isTest = req.body.test === 'yes' || req.body.test === true;
+    const delivery = resolveDelivery(req.body);
+    const telegramOnly = !delivery.sendWhatsApp;
 
     // Prepare simple message data
     const messageData = {
@@ -152,62 +174,37 @@ async function handleTextMessage(req, res) {
       ...Object.keys(req.body).reduce((acc, key) => {
         const lowerKey = key.toLowerCase();
         // Exclude already processed keys
-        if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'time', 'whatsapp', 'telegram', 'signal'].includes(lowerKey)) {
+        if (!['msg', 'symbol', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'gonderim', 'gönderim', 'time', 'whatsapp', 'telegram', 'signal'].includes(lowerKey)) {
           acc[key] = req.body[key];
         }
         return acc;
       }, {})
     };
 
-    // If test message, only send to Telegram test group
-    if (isTest) {
-      log('info', 'Test text message detected - sending only to Telegram test group');
+    // Telegram-only targets (test / analiz)
+    if (telegramOnly) {
+      log('info', `"${delivery.mode}" text message detected - sending only to Telegram ${delivery.mode} group`);
 
-      // Send to Telegram test group only
       try {
-        const testChatId = process.env.TELEGRAM_TEST_GROUP_CHAT_ID;
-        if (!testChatId) {
-          throw new Error('TELEGRAM_TEST_GROUP_CHAT_ID not configured in environment variables');
+        const chatId = delivery.telegramChatId;
+        if (!chatId) {
+          throw new Error(`${delivery.envKey} not configured in environment variables`);
         }
 
-        await telegramService.sendFormattedMessage(signalData, chartImage, testChatId);
-        results.telegram = { success: true, chatId: testChatId };
-        log('info', 'Test text message sent to Telegram test group successfully', { chatId: testChatId });
+        await telegramService.sendFormattedMessage(signalData, chartImage, chatId);
+        results.telegram = { success: true, chatId };
+        log('info', `Text message sent to Telegram ${delivery.mode} group successfully`, { chatId });
       } catch (telegramError) {
-        log('error', 'Failed to send test text message to Telegram', {
+        log('error', `Failed to send ${delivery.mode} text message to Telegram`, {
           error: telegramError.message
         });
         results.telegram = { success: false, error: telegramError.message };
       }
 
-      // Skip WhatsApp for test messages
-      results.whatsapp = { success: true, skipped: true, reason: 'Test message - Telegram only' };
+      // Skip WhatsApp for Telegram-only targets
+      results.whatsapp = { success: true, skipped: true, reason: `${delivery.mode} message - Telegram only` };
     }
-    // If private message, only send to Telegram private group
-    else if (isPrivate) {
-      log('info', 'Private text message detected - sending only to Telegram private group');
-
-      // Send to Telegram private group only
-      try {
-        const privateChatId = process.env.TELEGRAM_PRIVATE_GROUP_CHAT_ID;
-        if (!privateChatId) {
-          throw new Error('TELEGRAM_PRIVATE_GROUP_CHAT_ID not configured in environment variables');
-        }
-
-        await telegramService.sendFormattedMessage(signalData, chartImage, privateChatId);
-        results.telegram = { success: true, chatId: privateChatId };
-        log('info', 'Private text message sent to Telegram private group successfully', { chatId: privateChatId });
-      } catch (telegramError) {
-        log('error', 'Failed to send private text message to Telegram', {
-          error: telegramError.message
-        });
-        results.telegram = { success: false, error: telegramError.message };
-      }
-
-      // Skip WhatsApp for private messages
-      results.whatsapp = { success: true, skipped: true, reason: 'Private message - Telegram only' };
-    }
-    // Normal message - send to both WhatsApp and Telegram
+    // VIP message - send to WhatsApp and Telegram VIP group
     else {
       // Send to WhatsApp (with chart image if available)
       try {
@@ -265,11 +262,17 @@ async function handleTextMessage(req, res) {
         results.whatsapp = { success: false, error: whatsappError.message };
       }
 
-      // Send to Telegram (with chart if available)
+      // Send to Telegram VIP group (with chart if available)
       try {
-        await telegramService.sendFormattedMessage(signalData, chartImage);
-        results.telegram = { success: true };
-        log('info', 'Text message sent to Telegram successfully', {
+        const vipChatId = delivery.telegramChatId;
+        if (!vipChatId) {
+          throw new Error('TELEGRAM_VIP_CHAT_ID not configured in environment variables');
+        }
+
+        await telegramService.sendFormattedMessage(signalData, chartImage, vipChatId);
+        results.telegram = { success: true, chatId: vipChatId };
+        log('info', 'Text message sent to Telegram VIP group successfully', {
+          chatId: vipChatId,
           chartIncluded: !!chartImage
         });
       } catch (telegramError) {
@@ -290,26 +293,21 @@ async function handleTextMessage(req, res) {
     log('info', 'Text message processed successfully', {
       msg: messageData.msg,
       symbol: messageData.symbol,
-      isPrivate,
-      isTest,
+      gonderim: delivery.mode,
       whatsapp: results.whatsapp.success,
       telegram: results.telegram.success,
       sentToGroups: results.whatsapp.sentTo || 1,
     });
 
     // Determine response message
-    let responseMessage = 'Text message sent successfully';
-    if (isTest) {
-      responseMessage = 'Test text message sent to Telegram test group only';
-    } else if (isPrivate) {
-      responseMessage = 'Private text message sent to Telegram private group only';
-    }
+    const responseMessage = telegramOnly
+      ? `Text message sent to Telegram ${delivery.mode} group only`
+      : 'Text message sent to Telegram VIP group and WhatsApp';
 
     res.status(200).json({
       success: true,
       message: responseMessage,
-      isPrivate,
-      isTest,
+      gonderim: delivery.mode,
       chartIncluded: !!chartImage,
       results: {
         whatsapp: results.whatsapp.success,
@@ -385,6 +383,7 @@ app.get('/health', (req, res) => {
     service: 'TradingView Webhook Server',
     services: {
       whatsapp: whatsappService.validateConfiguration(),
+      whatsappConnection: whatsappService.getStatus().status,
       telegram: telegramService.validateConfiguration(),
       chart: chartService.validateConfiguration()
     }
@@ -401,11 +400,8 @@ app.post('/webhook', async (req, res) => {
       return await handleTextMessage(req, res);
     }
 
-    // Check if this is a private message (should only go to Telegram private group)
-    const isPrivate = req.body.private == 'yes' || req.body.private === true;
-
-    // Check if this is a test message (should only go to Telegram test group)
-    const isTest = req.body.test === 'yes' || req.body.test === true;
+    const delivery = resolveDelivery(req.body);
+    const telegramOnly = !delivery.sendWhatsApp;
 
     // Validate required fields for trading signal format
     // We make title optional and action/symbol/price more flexible
@@ -413,7 +409,7 @@ app.post('/webhook', async (req, res) => {
 
     // If title is missing, try a few fallbacks or find ANY reasonable string field
     if (!title) {
-      const technicalKeys = ['action', 'symbol', 'price', 'msg', 'subject', 'header', 'ticker', 'side', 'order', 'close', 'entry', 'time', 'test', 'private', 'phonenumber', 'phonenumbers', 'groupid', 'groupids'];
+      const technicalKeys = ['action', 'symbol', 'price', 'msg', 'subject', 'header', 'ticker', 'side', 'order', 'close', 'entry', 'time', 'test', 'private', 'gonderim', 'gönderim', 'phonenumber', 'phonenumbers', 'groupid', 'groupids'];
       const potentialTitleKey = Object.keys(req.body).find(key =>
         !technicalKeys.includes(key.toLowerCase()) &&
         typeof req.body[key] === 'string' &&
@@ -454,7 +450,7 @@ app.post('/webhook', async (req, res) => {
       ...Object.keys(req.body).reduce((acc, key) => {
         const lowerKey = key.toLowerCase();
         // Exclude already processed keys and common webhook fields
-        if (!['title', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'time', 'whatsapp', 'telegram', 'signal'].includes(lowerKey)) {
+        if (!['title', 'action', 'symbol', 'price', 'phonenumber', 'phonenumbers', 'groupid', 'groupids', 'private', 'test', 'gonderim', 'gönderim', 'time', 'whatsapp', 'telegram', 'signal'].includes(lowerKey)) {
           acc[key] = req.body[key];
         }
         return acc;
@@ -498,53 +494,30 @@ app.post('/webhook', async (req, res) => {
       telegram: null
     };
 
-    // If test message, only send to Telegram test group
-    if (isTest) {
-      log('info', 'Test message detected - sending only to Telegram test group');
+    // Telegram-only targets (test / analiz)
+    if (telegramOnly) {
+      log('info', `"${delivery.mode}" signal detected - sending only to Telegram ${delivery.mode} group`);
 
-      // Send to Telegram test group only
       try {
-        const testChatId = process.env.TELEGRAM_TEST_GROUP_CHAT_ID;
-        if (!testChatId) {
-          throw new Error('TELEGRAM_TEST_GROUP_CHAT_ID not configured in environment variables');
+        const chatId = delivery.telegramChatId;
+        if (!chatId) {
+          throw new Error(`${delivery.envKey} not configured in environment variables`);
         }
 
-        await telegramService.sendFormattedMessage(signalData, chartImage, testChatId);
-        results.telegram = { success: true, chatId: testChatId };
-        log('info', 'Test signal sent to Telegram test group successfully', { chatId: testChatId });
+        await telegramService.sendFormattedMessage(signalData, chartImage, chatId);
+        results.telegram = { success: true, chatId };
+        log('info', `Signal sent to Telegram ${delivery.mode} group successfully`, { chatId });
       } catch (telegramError) {
-        log('error', 'Failed to send test message to Telegram', {
+        log('error', `Failed to send ${delivery.mode} signal to Telegram`, {
           error: telegramError.message
         });
         results.telegram = { success: false, error: telegramError.message };
       }
 
-      // Skip WhatsApp for test messages
-      results.whatsapp = { success: true, skipped: true, reason: 'Test message - Telegram only' };
-    } else if (isPrivate) {
-      log('info', 'Private message detected - sending only to Telegram private group');
-
-      // Send to Telegram private group only
-      try {
-        const privateChatId = process.env.TELEGRAM_PRIVATE_GROUP_CHAT_ID;
-        if (!privateChatId) {
-          throw new Error('TELEGRAM_PRIVATE_GROUP_CHAT_ID not configured in environment variables');
-        }
-
-        await telegramService.sendFormattedMessage(signalData, chartImage, privateChatId);
-        results.telegram = { success: true, chatId: privateChatId };
-        log('info', 'Private signal sent to Telegram private group successfully', { chatId: privateChatId });
-      } catch (telegramError) {
-        log('error', 'Failed to send private message to Telegram', {
-          error: telegramError.message
-        });
-        results.telegram = { success: false, error: telegramError.message };
-      }
-
-      // Skip WhatsApp for private messages
-      results.whatsapp = { success: true, skipped: true, reason: 'Private message - Telegram only' };
+      // Skip WhatsApp for Telegram-only targets
+      results.whatsapp = { success: true, skipped: true, reason: `${delivery.mode} message - Telegram only` };
     } else {
-      // Normal message - send to both WhatsApp and Telegram
+      // VIP message - send to both WhatsApp and Telegram VIP group
 
       // Send to WhatsApp
       try {
@@ -607,11 +580,16 @@ app.post('/webhook', async (req, res) => {
         results.whatsapp = { success: false, error: whatsappError.message };
       }
 
-      // Send to Telegram (all configured chats)
+      // Send to Telegram VIP group
       try {
-        await telegramService.sendFormattedMessage(signalData, chartImage);
-        results.telegram = { success: true };
-        log('info', 'Signal sent to Telegram successfully');
+        const vipChatId = delivery.telegramChatId;
+        if (!vipChatId) {
+          throw new Error('TELEGRAM_VIP_CHAT_ID not configured in environment variables');
+        }
+
+        await telegramService.sendFormattedMessage(signalData, chartImage, vipChatId);
+        results.telegram = { success: true, chatId: vipChatId };
+        log('info', 'Signal sent to Telegram VIP group successfully', { chatId: vipChatId });
       } catch (telegramError) {
         log('error', 'Failed to send to Telegram', {
           error: telegramError.message
@@ -632,25 +610,20 @@ app.post('/webhook', async (req, res) => {
       action: signalData.action,
       price,
       chartIncluded: !!chartImage,
-      isPrivate,
-      isTest,
+      gonderim: delivery.mode,
       whatsapp: results.whatsapp.success,
       telegram: results.telegram.success
     });
 
     // Determine response message
-    let responseMessage = 'Signal sent successfully';
-    if (isTest) {
-      responseMessage = 'Test signal sent to Telegram test group only';
-    } else if (isPrivate) {
-      responseMessage = 'Private signal sent to Telegram private group only';
-    }
+    const responseMessage = telegramOnly
+      ? `Signal sent to Telegram ${delivery.mode} group only`
+      : 'Signal sent to Telegram VIP group and WhatsApp';
 
     res.status(200).json({
       success: true,
       message: responseMessage,
-      isPrivate,
-      isTest,
+      gonderim: delivery.mode,
       chartIncluded: !!chartImage,
       results: {
         whatsapp: results.whatsapp.success,
@@ -749,9 +722,9 @@ app.listen(PORT, () => {
     log('error', 'No messaging services properly configured');
   }
 
-  // Setup news checker cron job (every 30 minutes)
+  // Setup news checker cron job (every 2 hours; volume capped in newsChecker)
   if (telegramValid) {
-    log('info', 'Setting up news checker cron job (every 30 minutes)');
+    log('info', 'Setting up news checker cron job (every 2 hours)');
 
     // Run immediately on startup - wait a bit for MongoDB to be fully ready
     setTimeout(async () => {
@@ -774,8 +747,8 @@ app.listen(PORT, () => {
       }
     }, 2000); // Wait 2 seconds for MongoDB connection to stabilize
 
-    // Schedule cron job to run every 30 minutes
-    cron.schedule('*/30 * * * *', async () => {
+    // Schedule cron job to run every 2 hours (12 runs/day, spread out)
+    cron.schedule('0 */2 * * *', async () => {
       log('info', 'Running scheduled news check...');
       try {
         const result = await newsChecker.checkAndSendNewNews();
@@ -795,7 +768,7 @@ app.listen(PORT, () => {
       }
     });
 
-    log('info', 'News checker cron job scheduled successfully (runs every 30 minutes)');
+    log('info', 'News checker cron job scheduled successfully (runs every 2 hours)');
   } else {
     log('warn', 'News checker cron job not started - Telegram service not configured');
   }
@@ -810,6 +783,13 @@ async function gracefulShutdown(signal) {
     await chartService.closeBrowser();
   } catch (error) {
     log('error', 'Error during browser cleanup', { error: error.message });
+  }
+
+  // Close WhatsApp socket (session stays saved in wa-auth/)
+  try {
+    await require('./services/whatsappClient').close();
+  } catch (error) {
+    log('error', 'Error closing WhatsApp connection', { error: error.message });
   }
 
   // Close MongoDB connection

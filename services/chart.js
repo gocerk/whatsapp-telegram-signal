@@ -112,10 +112,12 @@ class ChartService {
       // Get base chart URL based on time parameter
       const baseChartUrl = this.getChartUrlByTime(options.time);
       
-      // Build TradingView chart URL
-      const chartUrl = `${baseChartUrl}?symbol=${encodeURIComponent(formattedSymbol)}`;
+      // Build TradingView chart URL (interval overrides the saved layout's timeframe, e.g. time=7m)
+      const interval = this.parseInterval(options.time);
+      const chartUrl = `${baseChartUrl}?symbol=${encodeURIComponent(formattedSymbol)}` +
+        (interval ? `&interval=${encodeURIComponent(interval)}` : '');
       
-      log('info', `Using chart URL for time ${options.time || 'default'}: ${baseChartUrl}`);
+      log('info', `Using chart URL for time ${options.time || 'default'}: ${chartUrl}`);
       
       // Get or create browser instance (reused across requests)
       const browser = await this.getBrowser();
@@ -394,6 +396,36 @@ class ChartService {
 
     // Default chart URL (using 4H as default)
     return 'https://tr.tradingview.com/chart/iIUr0LOx/';
+  }
+
+  /**
+   * Convert webhook "time" value to a TradingView interval string.
+   * Examples: 7m -> "7", 15M -> "15", 2h -> "120", 4H -> "240",
+   *           30s -> "30S", 1d -> "1D", 1w -> "1W", 1mo -> "1M"
+   * Note: "m"/"M" means minutes (existing alerts use 15M/5M); use "mo" for months.
+   * Returns null for empty/unrecognized values (layout's own timeframe is used).
+   */
+  parseInterval(time) {
+    if (time === undefined || time === null) return null;
+    const match = String(time).trim().match(/^(\d+)\s*(s|sn|m|dk|min|h|sa|d|g|w|mo)?$/i);
+    if (!match) {
+      if (String(time).trim()) log('warn', `Unrecognized time value "${time}", using layout default timeframe`);
+      return null;
+    }
+
+    const value = parseInt(match[1], 10);
+    if (!value) return null;
+    const unit = (match[2] || 'm').toLowerCase();
+
+    switch (unit) {
+      case 's': case 'sn': return `${value}S`;
+      case 'm': case 'dk': case 'min': return String(value);
+      case 'h': case 'sa': return String(value * 60);
+      case 'd': case 'g': return `${value}D`;
+      case 'w': return `${value}W`;
+      case 'mo': return `${value}M`;
+      default: return null;
+    }
   }
 
   // Format symbol for TradingView (ensure proper exchange:symbol format)

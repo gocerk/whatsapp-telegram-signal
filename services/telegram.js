@@ -9,33 +9,34 @@ const log = (level, message, data = null) => {
   }
 };
 
+// Payload keys that hold price levels and should use the entry price precision
+const PRICE_LEVEL_KEY = /^(entry|sl|stop|stoploss|tp\d*|target\d*)$/i;
+
 // Telegram service using Telegram Bot API
 class TelegramService {
   constructor() {
     this.botToken = process.env.TELEGRAM_BOT_TOKEN;
-    // Parse comma-separated chat IDs
-    const chatIdEnv = process.env.TELEGRAM_CHAT_ID;
-    this.chatIds = chatIdEnv
-      ? chatIdEnv.split(',').map(id => id.trim()).filter(id => id)
-      : [];
-    // Keep chatId for backward compatibility (first chat ID)
-    this.chatId = this.chatIds[0] || null;
+    // No default chats: every send must target an explicit chat ID
+    // (TELEGRAM_VIP_CHAT_ID / TELEGRAM_ANALIZ_CHAT_ID / TELEGRAM_TEST_GROUP_CHAT_ID, chosen in main.js via "gonderim")
+    this.chatIds = [];
+    this.chatId = null;
     this.apiUrl = this.botToken
       ? `https://api.telegram.org/bot${this.botToken}`
       : null;
-    
+
     this.initializeService();
   }
 
   initializeService() {
-    if (!this.botToken || this.chatIds.length === 0) {
-      log('warn', 'Telegram bot token or chat ID not configured');
+    if (!this.botToken) {
+      log('warn', 'Telegram bot token not configured');
       return;
     }
-    
+
     log('info', 'Telegram service initialized successfully', {
-      chatIds: this.chatIds,
-      chatCount: this.chatIds.length,
+      vipChatId: process.env.TELEGRAM_VIP_CHAT_ID,
+      analizChatId: process.env.TELEGRAM_ANALIZ_CHAT_ID,
+      testChatId: process.env.TELEGRAM_TEST_GROUP_CHAT_ID,
       hasToken: !!this.botToken
     });
   }
@@ -69,16 +70,57 @@ class TelegramService {
   }
 
   /**
+   * Decide how many decimals to show for the prices of one signal (entry, SL, TPs).
+   * Uses the entry price's own precision (e.g. GBPUSD 1.33708 -> 5), with at least
+   * 2 decimals and at least 6 significant digits, because JSON drops trailing zeros
+   * (1.33700 arrives as 1.337). Capped at 8 decimals.
+   * @param {string|number} entryPrice - Entry price as sent by TradingView
+   * @returns {number} Decimal places to use
+   */
+  getPriceDecimals(entryPrice) {
+    const strValue = String(entryPrice ?? '').trim();
+    if (!/^-?\d+(\.\d+)?$/.test(strValue)) {
+      return 2;
+    }
+
+    const num = Math.abs(parseFloat(strValue));
+    const ownDecimals = (strValue.split('.')[1] || '').length;
+    // Long computed values (e.g. 1.3368185714285716) are not instrument precision
+    const instrumentDecimals = ownDecimals <= 6 ? ownDecimals : 0;
+    const significantDecimals = num > 0 ? 6 - (Math.floor(Math.log10(num)) + 1) : 0;
+
+    return Math.min(8, Math.max(2, instrumentDecimals, significantDecimals));
+  }
+
+  /**
+   * Format a price with a fixed number of decimals; non-numeric values are returned as is
+   */
+  formatPrice(value, decimals) {
+    if (value === null || value === undefined || value === '') {
+      return value;
+    }
+
+    const strValue = String(value).trim();
+    if (!/^-?\d+(\.\d+)?$/.test(strValue)) {
+      return strValue;
+    }
+
+    return parseFloat(strValue).toFixed(decimals);
+  }
+
+  /**
    * Format TradingView webhook data into a readable message
    * Same format as WhatsApp: title, datetime, action symbol price, then KEY: VALUE for other properties
    */
   formatTradingViewMessage(data) {
     const { title, action, symbol, price, ...otherProps } = data;
-    
+
     const messageTitle = title || "Yeni Islem Onerisi";
     const messageAction = (action || data.side || "").toUpperCase();
     const messageSymbol = symbol || data.ticker || "";
-    const messagePrice = this.formatNumber(price || data.close || "");
+    const entryPrice = price || data.close || "";
+    const priceDecimals = this.getPriceDecimals(entryPrice);
+    const messagePrice = this.formatPrice(entryPrice, priceDecimals);
 
     // Build main message with title, datetime, action, symbol, price
     let message = `${messageTitle}\n\n${messageAction} ${messageSymbol} ${messagePrice}`;
@@ -92,8 +134,10 @@ class TelegramService {
       message += '\n';
       additionalProps.forEach(key => {
         const value = otherProps[key];
-        // Format value if it's a number
-        const formattedValue = this.formatNumber(value);
+        // Price levels (SL, TP1, TP2...) use the entry price precision; other numbers keep the old 2-decimal format
+        const formattedValue = PRICE_LEVEL_KEY.test(key)
+          ? this.formatPrice(value, priceDecimals)
+          : this.formatNumber(value);
         // Format key: uppercase and remove special characters, keep numbers
         const formattedKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
         message += `\n${formattedKey}: ${formattedValue}`;
@@ -196,7 +240,7 @@ _Trading signal from TradingView_`;
 
     // Send to all configured chat IDs
     if (this.chatIds.length === 0) {
-      throw new Error('TELEGRAM_CHAT_ID must be set in environment variables or provided as parameter');
+      throw new Error('chatId parameter is required (no default Telegram chats configured)');
     }
 
     const results = [];
@@ -323,7 +367,7 @@ _Trading signal from TradingView_`;
 
     // Send to all configured chat IDs
     if (this.chatIds.length === 0) {
-      throw new Error('TELEGRAM_CHAT_ID must be set in environment variables');
+      throw new Error('chatId parameter is required (no default Telegram chats configured)');
     }
 
     const results = [];
@@ -398,7 +442,9 @@ _Trading signal from TradingView_`;
   validateConfiguration() {
     const requiredEnvVars = [
       'TELEGRAM_BOT_TOKEN',
-      'TELEGRAM_CHAT_ID'
+      'TELEGRAM_VIP_CHAT_ID',
+      'TELEGRAM_ANALIZ_CHAT_ID',
+      'TELEGRAM_TEST_GROUP_CHAT_ID'
     ];
 
     const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
