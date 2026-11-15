@@ -87,13 +87,19 @@ const chartService = new ChartService();
 
 // Delivery targets selected by the "gonderim" (or "gönderim") field.
 // "vip"    -> Telegram VIP group (+ WhatsApp)
-// "analiz" -> Telegram analiz group only
+// "analiz" -> Telegram analiz group + analiz channel only
 // "vipislem" -> Telegram VIP işlem group only
 // "test"   -> Telegram test group only
 // missing / anything else -> treated as "test" (safe default)
 const DELIVERY_TARGETS = {
   vip: { envKey: 'TELEGRAM_VIP_CHAT_ID', sendWhatsApp: true },
-  analiz: { envKey: 'TELEGRAM_ANALIZ_CHAT_ID', sendWhatsApp: false },
+  analiz: {
+    envKey: 'TELEGRAM_ANALIZ_CHAT_ID',
+    // Extra chats that also receive analiz messages (comma-separated in env)
+    extraEnvKey: 'TELEGRAM_ANALIZ_EXTRA_CHAT_IDS',
+    defaultExtraChatIds: '-1004480578159',
+    sendWhatsApp: false
+  },
   vipislem: { envKey: 'TELEGRAM_VIPISLEM_CHAT_ID', defaultChatId: '-1003670454613', sendWhatsApp: false },
   test: { envKey: 'TELEGRAM_TEST_GROUP_CHAT_ID', sendWhatsApp: false }
 };
@@ -106,8 +112,29 @@ function resolveDelivery(body) {
     mode,
     envKey: target.envKey,
     sendWhatsApp: target.sendWhatsApp,
-    telegramChatId: process.env[target.envKey] || target.defaultChatId
+    telegramChatId: process.env[target.envKey] || target.defaultChatId,
+    extraChatIds: String((target.extraEnvKey && process.env[target.extraEnvKey]) || target.defaultExtraChatIds || '')
+      .split(',')
+      .map(id => id.trim())
+      .filter(id => id)
   };
+}
+
+// Send to the delivery target's extra Telegram chats (e.g. analiz channel).
+// Each chat is tried independently; returns per-chat results.
+async function sendToExtraTelegramChats(delivery, signalData, chartImage) {
+  const extraResults = [];
+  for (const chatId of delivery.extraChatIds) {
+    try {
+      await telegramService.sendFormattedMessage(signalData, chartImage, chatId);
+      extraResults.push({ chatId, success: true });
+      log('info', `Sent to extra Telegram ${delivery.mode} chat successfully`, { chatId });
+    } catch (error) {
+      extraResults.push({ chatId, success: false, error: error.message });
+      log('error', `Failed to send to extra Telegram ${delivery.mode} chat`, { chatId, error: error.message });
+    }
+  }
+  return extraResults;
 }
 
 // Handle simple text message format
@@ -199,6 +226,15 @@ async function handleTextMessage(req, res) {
           error: telegramError.message
         });
         results.telegram = { success: false, error: telegramError.message };
+      }
+
+      // Extra chats for this target (analiz -> analiz channel)
+      if (delivery.extraChatIds.length > 0) {
+        const extra = await sendToExtraTelegramChats(delivery, signalData, chartImage);
+        results.telegram.extra = extra;
+        if (!results.telegram.success && extra.some(r => r.success)) {
+          results.telegram.success = true;
+        }
       }
 
       // Skip WhatsApp for Telegram-only targets
@@ -512,6 +548,15 @@ app.post('/webhook', async (req, res) => {
           error: telegramError.message
         });
         results.telegram = { success: false, error: telegramError.message };
+      }
+
+      // Extra chats for this target (analiz -> analiz channel)
+      if (delivery.extraChatIds.length > 0) {
+        const extra = await sendToExtraTelegramChats(delivery, signalData, chartImage);
+        results.telegram.extra = extra;
+        if (!results.telegram.success && extra.some(r => r.success)) {
+          results.telegram.success = true;
+        }
       }
 
       // Skip WhatsApp for Telegram-only targets
